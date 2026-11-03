@@ -881,13 +881,17 @@ static void tab_dlss_nr(float scale) {
 
     // Plugin detection check
     static bool checked_plugin = false;
-    static bool plugin_found = false;
+    static bool sl_found = false, nv_found = false;
     if (!checked_plugin) {
         checked_plugin = true;
-        FILE *f = fopen("sl.dlss_nr.dll", "rb");
-        if (f) { fclose(f); plugin_found = true; }
+        FILE *f1 = fopen("sl.dlss_nr.dll", "rb");
+        if (f1) { fclose(f1); sl_found = true; }
+        FILE *f2 = fopen("nvngx_dlssnr.dll", "rb");
+        if (f2) { fclose(f2); nv_found = true; }
     }
-    const char *status_str = plugin_found ? "sl.dlss_nr.dll detected (Active)" : "Drop sl.dlss_nr.dll into GAME/ folder";
+    const char *status_str = (sl_found && nv_found)
+                                 ? (cfg_bool("TOTK_DLSS_NR") ? "Active & Engaged (Preset B Fast Model)" : "Detected & Ready (sl.dlss_nr + nvngx_dlssnr)")
+                                 : (sl_found ? "Detected (sl.dlss_nr.dll Active)" : "Missing (Drop sl.dlss_nr.dll into GAME/ folder)");
     opt_button("##nr_status", UI_MENU_DLSS_NR_STATUS, UI_MENU_DLSS_NR_STATUS_DESC, status_str);
 
     opt_group(UI_MENU_MV_DEBUG);
