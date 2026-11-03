@@ -37,7 +37,7 @@ static const char *const known[] = {
     "BIND_SKIP", "BIND_STATS", "BIND_UP", "BIND_X", "BIND_Y",
     "BIND_ZL", "BIND_ZR", "BLOCK_VIEWS_3D", "CLOTH_REALTIME", "COLOR_BRIGHTNESS", "COLOR_CONTRAST", "COLOR_GAMMA",
     "COLOR_PRESET", "COLOR_SATURATION", "CONTACT_DEBUG", "CONTACT_SHADOWS", "CORE_DIAG", "CRIT", "CRIT_OUT",
-    "DESC_TEMPLATE", "DEVICE_PROFILE", "DLAA", "DLAA_JITTER", "DLAA_MV", "DLSS", "DLSS_NR", "DLSS_NR_MODEL", "DLSS_NR_PRESET", "DLSS_NR_RAY_CACHE", "DLSS_NR_SHARPNESS", "DLSS_PRESET", "DUMP", "DUMP_BUF", "DUMP_DIR",
+    "DESC_TEMPLATE", "DEVICE_PROFILE", "DLAA", "DLAA_JITTER", "DLAA_MV", "DLSS", "DLSS_NR", "DLSS_NR_COLOR", "DLSS_NR_MODEL", "DLSS_NR_PRESET", "DLSS_NR_SCALE", "DLSS_NR_SHARPNESS", "DLSS_NR_TRANSFER", "DLSS_PRESET", "DUMP", "DUMP_BUF", "DUMP_DIR",
     "DUMP_LOG", "EXEFS", "FEEDBACK", "FG_MODE", "FG_MULT", "FG_PRESET", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
     "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FOV", "FOV_PATCH", "FPS60", "FPS_LIMIT", "FREEZE_IDLE", "FREE_CORES",
     "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "HDR", "HDR_GAME_NITS",
@@ -127,6 +127,13 @@ static const CfgMeta metas[] = {
     {"REFLEX", "on", "off|on|boost", LIVE},
     {"ANTILAG2", "on", "off|on", LIVE},
     {"DLAA", "0", "0|1", RESTART}, {"DLSS", "dlaa", "dlaa|quality|balanced|performance|ultra_performance", RESTART}, {"FXAA", "1", "0|1", LIVE},
+    {"DLSS_NR", "0", "0|1", LIVE}, {"DLSS_NR_PRESET", "preset_b", "preset_b|preset_a|auto", LIVE},
+    {"DLSS_NR_MODEL", "preset_b", "preset_b|preset_a|transformer_gen3|transformer_gen2|auto", LIVE},
+    {"DLSS_NR_SCALE", "auto", "auto|1.0|0.85|0.75|0.5", LIVE},
+    {"DLSS_NR_COLOR", "0.0", "0.0|0.25|0.5|0.75|1.0", LIVE},
+    {"DLSS_NR_TRANSFER", "auto", "auto|1.0|0.75|0.5", LIVE},
+    {"DLSS_NR_SHARPNESS", "50", "0..100", LIVE},
+    {"MV_DEBUG", "0", "0|1", LIVE},
     {"ASPECT", "fit", "fit|stretch", LIVE}, {"FOV", "100", "70..140", LIVE},
     {"ANISO", "game", "game|2|4|8|16", RESTART},   // vk_texture.c sampler_features
     // colour adjustment (vk_color.c); the preset is the menu's, the four values are what the present uses

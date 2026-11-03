@@ -846,40 +846,55 @@ static void tab_screen(float scale) {
     restart_confirm();
 }
 
-// Tab: NVIDIA DLSS 5 Neural Rendering (DLSS-NR via Streamline 2.14+)
+extern "C" uint64_t vk_dlss_nr_dispatches(void);
+
+// Tab: NVIDIA DLSS Neural Rendering (DLSS-NR via nvngx_dlssnr.dll & Streamline 2.14+)
 static void tab_dlss_nr(float scale) {
     opt_begin("##dlss_nr", scale);
     opt_group(UI_MENU_DLSS_NR_TITLE);
 
     opt_toggle("TOTK_DLSS_NR", UI_MENU_DLSS_NR_ENABLE, UI_MENU_DLSS_NR_ENABLE_DESC);
 
-    static const char *const nr_preset_vals[] = {"quality", "balanced", "performance", "ultra_performance", "dlaa"};
+    static const char *const nr_preset_vals[] = {"preset_b", "preset_a", "auto"};
     static const char *const nr_preset_names[] = {
-        "Quality (Neural Super-Sampling + Reconstruction)",
-        "Balanced (Dynamic Neural Pacing)",
-        "Performance (High-Refresh Neural Reconstruction)",
-        "Ultra Performance (4K / 8K Neural Synthesis)",
-        "DLAA Native (100% Native + Neural Reconstruction)"
-    };
-    opt_choice_list("TOTK_DLSS_NR_PRESET", UI_MENU_DLSS_NR_PRESET, nr_preset_vals, nr_preset_names, 5, UI_MENU_DLSS_NR_PRESET_DESC);
-
-    static const char *const nr_model_vals[] = {"preset_b", "preset_a", "transformer_gen3", "transformer_gen2", "auto"};
-    static const char *const nr_model_names[] = {
-        "Preset B (Fast Neural Model - Strongly Recommended)",
+        "Preset B (Fast Neural Model - Forced / Recommended)",
         "Preset A (Standard Neural Model)",
-        "Transformer Gen 3 (DLSS 5 Neural Core)",
-        "Transformer Gen 2 (DLSS 4.5 Core)",
         "Automatic Selection"
     };
-    opt_choice_list("TOTK_DLSS_NR_MODEL", UI_MENU_DLSS_NR_MODEL, nr_model_vals, nr_model_names, 5, UI_MENU_DLSS_NR_MODEL_DESC);
+    opt_choice_list("TOTK_DLSS_NR_PRESET", UI_MENU_DLSS_NR_PRESET, nr_preset_vals, nr_preset_names, 3, UI_MENU_DLSS_NR_PRESET_DESC);
 
-    static const char *const cache_vals[] = {"realtime", "high", "off"};
-    static const char *const cache_names[] = {"Real-Time AI Radiance Caching", "High-Density Radiance Caching", "Off"};
-    opt_choice_list("TOTK_DLSS_NR_RAY_CACHE", UI_MENU_DLSS_NR_RAY_CACHE, cache_vals, cache_names, 3, UI_MENU_DLSS_NR_RAY_CACHE_DESC);
+    static const char *const scale_vals[] = {"auto", "1.0", "0.85", "0.75", "0.5"};
+    static const char *const scale_names[] = {
+        "Auto (Native Working Resolution)",
+        "1.0 (Full Quality - 100% Native Scale)",
+        "0.85 (Balanced Fidelity)",
+        "0.75 (High Performance)",
+        "0.5 (Maximum Performance - 4x Faster)"
+    };
+    opt_choice_list("TOTK_DLSS_NR_SCALE", UI_MENU_DLSS_NR_SCALE, scale_vals, scale_names, 5, UI_MENU_DLSS_NR_SCALE_DESC);
+
+    static const char *const color_vals[] = {"0.0", "0.25", "0.5", "0.75", "1.0"};
+    static const char *const color_names[] = {
+        "0.0 (Native Game Palette - Zero Tint)",
+        "0.25 (Subtle Neural Grading)",
+        "0.5 (Balanced Neural Color)",
+        "0.75 (Vibrant AI Transfer)",
+        "1.0 (Full AI Neural Synthesis)"
+    };
+    opt_choice_list("TOTK_DLSS_NR_COLOR", UI_MENU_DLSS_NR_COLOR, color_vals, color_names, 5, UI_MENU_DLSS_NR_COLOR_DESC);
+
+    static const char *const transfer_vals[] = {"auto", "1.0", "0.75", "0.5"};
+    static const char *const transfer_names[] = {
+        "Auto (Dynamic Transfer Pacing)",
+        "1.0 (Full Blend)",
+        "0.75 (Balanced Blend)",
+        "0.5 (Soft Transfer)"
+    };
+    opt_choice_list("TOTK_DLSS_NR_TRANSFER", UI_MENU_DLSS_NR_TRANSFER, transfer_vals, transfer_names, 4, UI_MENU_DLSS_NR_TRANSFER_DESC);
 
     opt_slider("TOTK_DLSS_NR_SHARPNESS", UI_MENU_DLSS_NR_SHARPNESS, 0, 100, UI_MENU_DLSS_NR_SHARPNESS_DESC, 5, "%.0f %%");
 
-    // Plugin detection check
+    // Plugin detection check and real-time execution telemetry
     static bool checked_plugin = false;
     static bool sl_found = false, nv_found = false;
     if (!checked_plugin) {
@@ -889,9 +904,23 @@ static void tab_dlss_nr(float scale) {
         FILE *f2 = fopen("nvngx_dlssnr.dll", "rb");
         if (f2) { fclose(f2); nv_found = true; }
     }
-    const char *status_str = (sl_found && nv_found)
-                                 ? (cfg_bool("TOTK_DLSS_NR") ? "Active & Engaged (Preset B Fast Model)" : "Detected & Ready (sl.dlss_nr + nvngx_dlssnr)")
-                                 : (sl_found ? "Detected (sl.dlss_nr.dll Active)" : "Missing (Drop sl.dlss_nr.dll into GAME/ folder)");
+    char status_str[128];
+    uint64_t nr_frames = vk_dlss_nr_dispatches();
+    if (sl_found && nv_found) {
+        if (cfg_bool("TOTK_DLSS_NR")) {
+            if (nr_frames > 0) {
+                snprintf(status_str, sizeof(status_str), "Active (Preset B | nvngx_dlssnr | %llu frames)", (unsigned long long)nr_frames);
+            } else {
+                snprintf(status_str, sizeof(status_str), "Active (Preset B Fast Model - Standby for 3D scene)");
+            }
+        } else {
+            snprintf(status_str, sizeof(status_str), "Detected & Ready (sl.dlss_nr + nvngx_dlssnr)");
+        }
+    } else if (sl_found) {
+        snprintf(status_str, sizeof(status_str), "Detected (sl.dlss_nr.dll Active)");
+    } else {
+        snprintf(status_str, sizeof(status_str), "Missing (Drop sl.dlss_nr.dll into GAME/ folder)");
+    }
     opt_button("##nr_status", UI_MENU_DLSS_NR_STATUS, UI_MENU_DLSS_NR_STATUS_DESC, status_str);
 
     opt_group(UI_MENU_MV_DEBUG);

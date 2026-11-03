@@ -168,25 +168,30 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                               "latency. Automatically guided to On when AMD FSR 3.1 or FSR 4 AI Frame Generation is enabled.",
     [UI_MENU_FXAA] = "Game anti-aliasing (FXAA)",
     [UI_MENU_FXAA_DESC] = "The game's own FXAA edge smoothing. It blurs fine detail a little; with DLAA on it is not needed.",
-    [UI_MENU_DLSS_NR_TITLE] = "NVIDIA DLSS 5 Neural Rendering (Streamline DLSS-NR)",
-    [UI_MENU_DLSS_NR_DESC] = "NVIDIA 3D-guided neural rendering and multi-frame neural reconstruction framework (Streamline 2.14+).",
-    [UI_MENU_DLSS_NR_ENABLE] = "DLSS Neural Rendering",
-    [UI_MENU_DLSS_NR_ENABLE_DESC] = "Engages NVIDIA DLSS-NR neural reconstruction (sl.dlss_nr.dll). Combines scene radiance, surface "
-                                    "motion vectors, and deep neural models to reconstruct photorealistic lighting and edges.",
-    [UI_MENU_DLSS_NR_PRESET] = "Neural Rendering quality",
-    [UI_MENU_DLSS_NR_PRESET_DESC] = "Quality mode for DLSS-NR neural reconstruction: Quality (highest detail), Balanced (balanced "
-                                    "pacing), Performance (high-refresh gaming), Ultra Performance (4K/8K), or DLAA (100% native).",
-    [UI_MENU_DLSS_NR_MODEL] = "Neural model architecture",
-    [UI_MENU_DLSS_NR_MODEL_DESC] = "Underlying neural network model: Transformer Gen 3 (DLSS 5), Transformer Gen 2, or Automatic.",
-    [UI_MENU_DLSS_NR_RAY_CACHE] = "Neural Radiance Caching",
-    [UI_MENU_DLSS_NR_RAY_CACHE_DESC] = "Leverages real-time AI neural radiance caching for ambient stability and clean specular response.",
-    [UI_MENU_DLSS_NR_SHARPNESS] = "Neural detail sharpness",
-    [UI_MENU_DLSS_NR_SHARPNESS_DESC] = "Adjusts neural edge definition and micro-contrast enhancement (0 to 100 %).",
-    [UI_MENU_DLSS_NR_STATUS] = "Streamline DLSS-NR plugin",
-    [UI_MENU_DLSS_NR_STATUS_DESC] = "Status of the Streamline DLSS-NR plugin in the GAME directory.",
-    [UI_MENU_MV_DEBUG] = "Motion Vector Visualizer (Debug)",
+    [UI_MENU_DLSS_NR_TITLE] = "NVIDIA DLSS Neural Rendering (DLSS NR)",
+    [UI_MENU_DLSS_NR_DESC] = "NVIDIA AI Neural Rendering framework powered by nvngx_dlssnr.dll and Streamline 2.14+. "
+                             "Synthesizes high-fidelity surface lighting, fine shadows, and detail reconstruction.",
+    [UI_MENU_DLSS_NR_ENABLE] = "DLSS NR (Neural Rendering)",
+    [UI_MENU_DLSS_NR_ENABLE_DESC] = "Enables NVIDIA DLSS Neural Rendering pass (Pre-SR neural inference). Evaluates scene "
+                                    "lighting and depth-guided motion vectors through the 165 MB tensor network.",
+    [UI_MENU_DLSS_NR_PRESET] = "Neural Rendering Preset",
+    [UI_MENU_DLSS_NR_PRESET_DESC] = "Operational model profile. Preset B is forced by default for vastly superior "
+                                    "frame rates and minimal latency overhead compared to older models.",
+    [UI_MENU_DLSS_NR_SCALE] = "Neural Working Scale",
+    [UI_MENU_DLSS_NR_SCALE_DESC] = "Controls internal resolution scale at which the neural model operates (OptiScaler WorkingScale). "
+                                   "Performance cost scales with the square of this value; 0.5-0.75 gives huge FPS boosts.",
+    [UI_MENU_DLSS_NR_COLOR] = "Neural Colour Strength",
+    [UI_MENU_DLSS_NR_COLOR_DESC] = "Balances AI synthesized color against native frame color (OptiScaler ColourStrength). "
+                                   "Setting to 0.0 retains native game grading and prevents desaturation.",
+    [UI_MENU_DLSS_NR_TRANSFER] = "Neural Transfer Strength",
+    [UI_MENU_DLSS_NR_TRANSFER_DESC] = "Fine-tunes the blending strength of the neural pass back into the frame pipeline (OptiScaler TransferStrength).",
+    [UI_MENU_DLSS_NR_SHARPNESS] = "Neural Detail Sharpness",
+    [UI_MENU_DLSS_NR_SHARPNESS_DESC] = "Post-reconstruction neural sharpening filter and micro-contrast enhancement (0 to 100 %).",
+    [UI_MENU_DLSS_NR_STATUS] = "Pipeline Status",
+    [UI_MENU_DLSS_NR_STATUS_DESC] = "Execution telemetry for nvngx_dlssnr.dll & sl.dlss_nr.dll with live frame counter.",
+    [UI_MENU_MV_DEBUG] = "Motion Vector Velocity Overlay (Debug)",
     [UI_MENU_MV_DEBUG_DESC] = "Visualizes live 2D motion vectors on screen (red/green velocity vectors, grey stationary). "
-                              "Confirms analytical camera and dynamic actor (Link, enemies) motion vector tracking.",
+                              "Verifies camera reprojection and depth-guided hybrid character tracking.",
 
     [UI_MENU_FPS_LIMIT] = "Frame rate limit",
     [UI_MENU_FPS_LIMIT_DESC] = "The most frames per second the game draws. Above 60 is experimental and needs Game speed "

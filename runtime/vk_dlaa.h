@@ -23,3 +23,5 @@ void vk_dlaa_viewport(VkExec *ex, VkViewport *v);
 // vk_exec_draw.c, once a draw's fragment shader is known: 1 skips the draw (the game's FXAA while TOTK_FXAA is 0, its
 // scaling draw when DLSS wrote the scaled picture).
 int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs);
+// Live DLSS-NR neural evaluation dispatch counter
+uint64_t vk_dlss_nr_dispatches(void);

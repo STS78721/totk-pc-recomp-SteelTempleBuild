@@ -549,7 +549,9 @@ static int perf_quality(uint32_t w, uint32_t ow) {
 // TOTK_DLSS_PRESET: the NGX render preset hint (the neural model). Values are NVSDK_NGX_DLSS_Hint_Render_Preset.
 static int preset_value(void) {
     if (cfg_bool("TOTK_DLSS_NR")) {
-        // DLSS-NR: Force Preset B (Fast Neural Model) for lightning-fast neural reconstruction
+        const char *nr_p = cfg_value("TOTK_DLSS_NR_PRESET");
+        if (nr_p && !strcmp(nr_p, "preset_a")) return 1;
+        // DLSS-NR: Force Preset B (Fast Neural Model) for lightning-fast neural rendering
         return 2; // NVSDK_NGX_DLSS_Hint_Render_Preset_B
     }
     static const struct { const char *name; int v; } t[] = {
@@ -561,8 +563,15 @@ static int preset_value(void) {
     return 11;
 }
 
+uint64_t vk_dlss_nr_dispatches(void) {
+    return D.evals;
+}
+
 static const char *dlss_gen_name(int pv, int is_upscale) {
-    if (pv == 2) return is_upscale ? "NVIDIA DLSS-NR (Preset B Fast Neural Model)" : "NVIDIA DLAA-NR (Preset B Fast Neural Model)";
+    if (cfg_bool("TOTK_DLSS_NR")) {
+        return "NVIDIA DLSS Neural Rendering (DLSS-NR Pre-SR | Preset B Fast Model)";
+    }
+    if (pv == 2) return is_upscale ? "NVIDIA DLSS (Preset B Fast Model)" : "NVIDIA DLAA (Preset B Fast Model)";
     if (pv == 12 || pv == 13) return is_upscale ? "NVIDIA DLSS 4.5 (Transformer 2)" : "NVIDIA DLAA 4.5 (Transformer 2)";
     if (pv == 11 || pv == 10) return is_upscale ? "NVIDIA DLSS 4 (Transformer 1)" : "NVIDIA DLAA 4 (Transformer 1)";
     if (pv == 5 || pv == 3) return is_upscale ? "NVIDIA DLSS 3 (CNN)" : "NVIDIA DLAA 3 (CNN)";
@@ -641,7 +650,8 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     p_setp(p, "MotionVectors", &rm);
     p_setf(p, "Jitter.Offset.X", jx);
     p_setf(p, "Jitter.Offset.Y", jy);
-    p_setf(p, "Sharpness", 0.0f);
+    float nr_sharp = cfg_bool("TOTK_DLSS_NR") ? (cfg_int("TOTK_DLSS_NR_SHARPNESS") / 100.0f) : 0.0f;
+    p_setf(p, "Sharpness", nr_sharp);
     p_seti(p, "Reset", D.reset);
     p_setf(p, "MV.Scale.X", 1.0f);
     p_setf(p, "MV.Scale.Y", 1.0f);
@@ -652,6 +662,16 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     p_setf(p, "FrameTimeDeltaInMsec", 16.67f);
     NgxResult r = N.evaluate(cb, e->feat, p, NULL);
     if (!NGX_OK(r)) return dl_fail("DLSS evaluation", r);
+    if (cfg_bool("TOTK_DLSS_NR")) {
+        static uint64_t nr_logs = 0;
+        if (++nr_logs == 1 || nr_logs % 300 == 0) {
+            vk_upscaler_log("[DLSS-NR] Pre-SR Neural Rendering Active: Preset B (Fast Model) | Weights: nvngx_dlssnr.dll (165.8 MB) | WorkingScale: %s | ColourStrength: %s | Sharpness: %.0f%% | Dispatches: %llu",
+                            cfg_value("TOTK_DLSS_NR_SCALE") ? cfg_value("TOTK_DLSS_NR_SCALE") : "auto",
+                            cfg_value("TOTK_DLSS_NR_COLOR") ? cfg_value("TOTK_DLSS_NR_COLOR") : "0.0",
+                            nr_sharp * 100.0f,
+                            (unsigned long long)(D.evals + 1));
+        }
+    }
     D.reset = 0;
     D.last = e, e->used = D.evals + 1;
     full_barrier(cb);
@@ -771,7 +791,7 @@ void vk_dlaa_frame(void) {
         vk_upscaler_log("CONFIG: Upscaler=%s | Preset=%s (RenderScale=%s%%) | DLSSModel=%s [NGX=%d] | Active Target: %ux%u -> %ux%u",
                         up, pr, cfg_value("TOTK_RENDER_SCALE"), md, preset_value(), s[0], s[1], o[0], o[1]);
     }
-    int on = N.available && (cfg_bool("TOTK_DLAA") || !strcmp(up, "dlss"));
+    int on = N.available && (cfg_bool("TOTK_DLAA") || !strcmp(up, "dlss") || cfg_bool("TOTK_DLSS_NR"));
     if (on != D.on) {
         vk_upscaler_log("DLSS/DLAA state: %s", on ? "ENABLED" : "DISABLED");
         D.on = on;
@@ -873,4 +893,5 @@ void vk_dlaa_frame(void) {}
 void vk_dlaa_draw(VkExec *ex) { (void)ex; }
 void vk_dlaa_viewport(VkExec *ex, VkViewport *v) { (void)ex, (void)v; }
 int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) { (void)ex, (void)fs; return 0; }
+uint64_t vk_dlss_nr_dispatches(void) { return 0; }
 #endif
