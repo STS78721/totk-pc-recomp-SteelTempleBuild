@@ -3,7 +3,7 @@
 import os
 import subprocess
 
-def create_desktop_shortcut(game_dir: str, shortcut_name: str = "The Legend of Zelda - Tears of the Kingdom") -> bool:
+def create_desktop_shortcut(game_dir: str, shortcut_name: str = "SteelTempSaint's ToTK Recomp") -> bool:
     """Creates a Windows desktop shortcut pointing to totk.exe in game_dir."""
     try:
         desktop_dir = os.path.join(os.environ.get("USERPROFILE", ""), "Desktop")
@@ -21,7 +21,7 @@ def create_desktop_shortcut(game_dir: str, shortcut_name: str = "The Legend of Z
         $s.TargetPath = '{exe_path}'
         $s.WorkingDirectory = '{game_dir}'
         $s.IconLocation = '{icon_path},0'
-        $s.Description = 'Play The Legend of Zelda: Tears of the Kingdom (PC Recompiled)'
+        $s.Description = 'Play The Legend of Zelda: Tears of the Kingdom (SteelTempSaint\'s ToTK Recomp)'
         $s.Save()
         """
 

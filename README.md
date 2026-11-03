@@ -1,4 +1,4 @@
-# 🗡️ TotK Recomp — SteelTemple Build 🎮⚡
+# 🗡️ SteelTempSaint's ToTK Recomp 🎮⚡
 ### *Transforming Tears of the Kingdom into a Flagship Modern PC Experience*
 
 [![Latest Release](https://img.shields.io/github/v/release/STS78721/totk-pc-recomp-SteelTempleBuild?label=Latest%20Release&color=brightgreen)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)
@@ -15,7 +15,7 @@
 
 ## 🌟 Our Vision: What We Want to Achieve
 
-**TotK Recomp: SteelTemple Build** is an enthusiast-driven, high-performance static recompilation fork of *The Legend of Zelda: Tears of the Kingdom* (Nintendo Switch) for native Windows and Linux x86-64.
+**SteelTempSaint's ToTK Recomp** is an enthusiast-driven, high-performance static recompilation fork of *The Legend of Zelda: Tears of the Kingdom* (Nintendo Switch) for native Windows and Linux x86-64.
 
 Our goal is not just to run the game on PC—it is to **elevate *Tears of the Kingdom* into a native, flagship PC title** that leverages the full power of modern hardware:
 - **Next-Gen Immersion:** Bridging the physical gap between player and world with native PS5 DualSense 4-channel audio streaming, dynamic adaptive trigger resistance, and voice-coil tactile feedback.

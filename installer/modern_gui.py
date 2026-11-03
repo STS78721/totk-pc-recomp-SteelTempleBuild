@@ -52,7 +52,7 @@ CARD_BORDER = "#2a313d"
 TEXT_DIM = "#9ba3af"
 
 CONTROLLER_GUIDE_TEXT = """================================================================================
-  THE LEGEND OF ZELDA: TEARS OF THE KINGDOM (PC RECOMPILED)
+  STEELTEMPSAINT'S TOTK RECOMP
   IN-GAME SETTINGS OVERLAY & CONTROLLER NAVIGATION GUIDE
 ================================================================================
 
@@ -101,7 +101,7 @@ class ModernTotkInstaller(ctk.CTk):
         super().__init__()
 
         # Window properties
-        self.title("The Legend of Zelda: Tears of the Kingdom - PC Setup")
+        self.title("The Legend of Zelda: Tears of the Kingdom - SteelTempSaint's ToTK Recomp")
         self.geometry("1000x740")
         self.minsize(940, 700)
         ctk.set_appearance_mode("dark")
@@ -196,8 +196,8 @@ class ModernTotkInstaller(ctk.CTk):
                                  font=ctk.CTkFont(size=20, weight="bold"), text_color=ACCENT_GREEN)
         title_lbl.pack(pady=(12, 2))
 
-        sub_lbl = ctk.CTkLabel(header, text="PC Recompiled • Steel Temple Edition (Beta 5) | 60 FPS • DLSS 4.5 • RTGI",
-                               font=ctk.CTkFont(size=12), text_color=TEXT_DIM)
+        sub_lbl = ctk.CTkLabel(header, text="SteelTempSaint's ToTK Recomp (Beta 5) | 60 FPS • DLSS 4.5 • DualSense Immersion",
+                               font=ctk.CTkFont(size=12, weight="bold"), text_color=TEXT_DIM)
         sub_lbl.pack(pady=(0, 12))
 
         # 2. Main Content Frame (Tabview) with tab change event bound!
