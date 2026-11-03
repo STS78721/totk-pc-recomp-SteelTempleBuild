@@ -851,9 +851,10 @@ def main():
     copy_romfs_patches(args.version, out)
     global RUNTIME
     RUNTIME = (args.runtime or RUNTIME).resolve()
-    stale = stale_shaders(RUNTIME)
-    if stale:
-        sys.exit(f'{stale[0]}: its SPIR-V header no longer matches; run python tools/build_shaders.py')
+    if not args.runtime_lib:
+        stale = stale_shaders(RUNTIME)
+        if stale:
+            sys.exit(f'{stale[0]}: its SPIR-V header no longer matches; run python tools/build_shaders.py')
     skip = {s for s in args.skip_runtime.split(',') if s}
     main_out = (ROOT / 'build' / args.version).resolve()
     pairs = None
