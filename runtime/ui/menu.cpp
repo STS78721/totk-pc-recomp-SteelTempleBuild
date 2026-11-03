@@ -62,6 +62,8 @@ int vk_has_amd_antilag(void);
 int vk_fg_active_multiplier(void);
 int vk_xess_wanted(void);
 int vk_xess_available(void);
+int vk_xefg_available(void);
+int vk_xell_available(void);
 int vk_xess_is_xmx(void);
 const char *vk_xess_model_name(void);
 uint64_t vk_xess_dispatches(void);
@@ -655,9 +657,14 @@ static bool rows_upscaler(void) {
     } else if (!strcmp(fg_cur, "dlss_fg") && !vk_gpu_is_nvidia()) {
         snprintf(fg_note, sizeof fg_note, "requires NVIDIA RTX GPU (using FSR 3.1 FG)");
         fgn = fg_note;
-    } else if (!strcmp(fg_cur, "xefg") && !vk_gpu_is_intel()) {
-        snprintf(fg_note, sizeof fg_note, "Intel Arc GPU recommended for hardware XeFG pipeline");
-        fgn = fg_note;
+    } else if (!strcmp(fg_cur, "xefg")) {
+        if (!vk_xefg_available()) {
+            snprintf(fg_note, sizeof fg_note, "libxess_fg.dll missing in game directory");
+            fgn = fg_note;
+        } else if (!vk_gpu_is_intel()) {
+            snprintf(fg_note, sizeof fg_note, "Intel Arc GPU recommended (libxess_fg.dll ready)");
+            fgn = fg_note;
+        }
     }
     if (opt_choice_list("TOTK_FG_MODE", UI_MENU_FG_MODE, fg_vals, fg_names, 5, UI_MENU_FG_MODE_DESC, -1, fgn)) {
         const char *fg_new = cfg_value("TOTK_FG_MODE");
@@ -735,7 +742,8 @@ static bool rows_upscaler(void) {
     static const char *const xell_vals[] = {"off", "on", "boost"};
     static const char *const xell_names[] = {"Off", "On", "On + Boost"};
     const char *xell_note = (!strcmp(cfg_value("TOTK_XELL"), "on") || !strcmp(cfg_value("TOTK_XELL"), "boost"))
-                                ? (vk_gpu_is_intel() ? "Intel XeLL frame pacing active" : "driver frame pacing")
+                                ? (vk_xell_available() ? (vk_gpu_is_intel() ? "Intel XeLL active (libxell.dll)" : "XeLL active (libxell.dll)")
+                                                       : (vk_gpu_is_intel() ? "Intel XeLL frame pacing" : "driver frame pacing"))
                                 : nullptr;
     opt_choice_list("TOTK_XELL", UI_MENU_XELL, xell_vals, xell_names, 3, UI_MENU_XELL_DESC, -1, xell_note);
 
@@ -1797,41 +1805,26 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "Native");
             }
 
-            // Line 2: Group related technologies together
-            // 1) Upscaler is immediately followed by its Frame Generation counterpart:
-            char line2[160];
-            snprintf(line2, sizeof line2, "%s", g_perf_upscaler);
-
-            if (fgm > 1) {
-                const char *fgm_mode = cfg_value("TOTK_FG_MODE");
-                const char *fgt = (!strcmp(fgm_mode, "dlss_fg") && vk_gpu_is_nvidia()) ? "DLSS FG"
-                                : (!strcmp(fgm_mode, "xefg") && vk_gpu_is_intel()) ? "XeFG"
-                                : (!strcmp(fgm_mode, "fsr4_fg") && vk_gpu_is_rx9000()) ? "FSR4 FG" : "FSR3 FG";
-                char fg_buf[32];
-                snprintf(fg_buf, sizeof fg_buf, " + %s %dx", fgt, fgm);
-                strncat(line2, fg_buf, sizeof(line2) - strlen(line2) - 1);
-            }
-
-            // 2) NR is grouped next: shows NR Active with its Preset right beside it:
-            if (is_nr) {
-                char nr_buf[48];
-                snprintf(nr_buf, sizeof nr_buf, " | NR Active (%s)", pr_display);
-                strncat(line2, nr_buf, sizeof(line2) - strlen(line2) - 1);
-            }
+            // Line 2 trailing info: only the resolution, motion vectors, and latency pipeline
+            // (FG and DLSS-NR are rendered adjacent as sleek badges with ZERO duplication)
+            char line2[160] = {0};
             if (scene[0] > 0 && out[0] > 0 && scene[0] < out[0]) {
                 char res_buf[32];
-                if (out[1] == 2160 && scene[1] == 1080) snprintf(res_buf, sizeof res_buf, " | 1080p -> 4K");
-                else if (out[1] == 1440 && scene[1] == 720) snprintf(res_buf, sizeof res_buf, " | 720p -> 1440p");
-                else snprintf(res_buf, sizeof res_buf, " | %up -> %up", scene[1], out[1]);
+                if (out[1] == 2160 && scene[1] == 1080) snprintf(res_buf, sizeof res_buf, "| 1080p -> 4K");
+                else if (out[1] == 1440 && scene[1] == 720) snprintf(res_buf, sizeof res_buf, "| 720p -> 1440p");
+                else snprintf(res_buf, sizeof res_buf, "| %up -> %up", scene[1], out[1]);
                 strncat(line2, res_buf, sizeof(line2) - strlen(line2) - 1);
             }
             if (is_nr || is_dlss || is_xess || is_fsr4) {
-                strncat(line2, " | Hybrid MV", sizeof(line2) - strlen(line2) - 1);
+                if (line2[0]) strncat(line2, " | Hybrid MV", sizeof(line2) - strlen(line2) - 1);
+                else strncat(line2, "| Hybrid MV", sizeof(line2) - strlen(line2) - 1);
             }
             if (cfg_bool("TOTK_REFLEX")) {
-                strncat(line2, " | Reflex", sizeof(line2) - strlen(line2) - 1);
+                if (line2[0]) strncat(line2, " | Reflex", sizeof(line2) - strlen(line2) - 1);
+                else strncat(line2, "| Reflex", sizeof(line2) - strlen(line2) - 1);
             } else if (cfg_bool("TOTK_XELL")) {
-                strncat(line2, " | XeLL", sizeof(line2) - strlen(line2) - 1);
+                if (line2[0]) strncat(line2, " | XeLL", sizeof(line2) - strlen(line2) - 1);
+                else strncat(line2, "| XeLL", sizeof(line2) - strlen(line2) - 1);
             }
             snprintf(g_perf_line2, sizeof g_perf_line2, "%s", line2);
 
@@ -2120,7 +2113,7 @@ static void perf_draw(const MenuTarget *t, float scale) {
     float spacing_x = 8.0f * scale;
     float line_gap = 4.0f * scale;
 
-    // Line 1: [LED Dot] [FPS]  1% [1% Low]  0.1% [0.1% Low]  [ms]  [FG Badge]  [NR Badge]
+    // Line 1: Pure performance metrics [LED Dot] [FPS]  1% [1% Low]  0.1% [0.1% Low]  [ms]
     float dot_rad = 3.5f * scale;
     float dot_area_w = dot_rad * 2.0f + 8.0f * scale;
     ImVec2 sz_fps = ImGui::CalcTextSize(g_perf_fps_num);
@@ -2128,24 +2121,27 @@ static void perf_draw(const MenuTarget *t, float scale) {
     ImVec2 sz_01p = g_perf_01pct_num[0] ? ImGui::CalcTextSize(g_perf_01pct_num) : ImVec2(0, 0);
     ImVec2 sz_ms = ImGui::CalcTextSize(g_perf_ms_num);
 
+    float line1_w = dot_area_w + sz_fps.x;
+    if (sz_1p.x > 0) line1_w += spacing_x + sz_1p.x;
+    if (sz_01p.x > 0) line1_w += spacing_x + sz_01p.x;
+    line1_w += spacing_x + sz_ms.x;
+    float line1_h = sz_fps.y;
+
+    // Line 2: Grouped technologies [Upscaler] -> [FG Badge] -> [NR Badge] -> [Tail Info]
+    ImVec2 sz_up = ImGui::CalcTextSize(g_perf_upscaler);
     ImVec2 sz_fg = g_perf_fg_badge[0] ? ImGui::CalcTextSize(g_perf_fg_badge) : ImVec2(0, 0);
     float fg_pill_w = g_perf_fg_badge[0] ? (sz_fg.x + 8.0f * scale) : 0.0f;
 
     ImVec2 sz_nr = g_perf_nr_badge[0] ? ImGui::CalcTextSize(g_perf_nr_badge) : ImVec2(0, 0);
     float nr_pill_w = g_perf_nr_badge[0] ? (sz_nr.x + 8.0f * scale) : 0.0f;
 
-    float line1_w = dot_area_w + sz_fps.x;
-    if (sz_1p.x > 0) line1_w += spacing_x + sz_1p.x;
-    if (sz_01p.x > 0) line1_w += spacing_x + sz_01p.x;
-    line1_w += spacing_x + sz_ms.x;
-    if (fg_pill_w > 0) line1_w += spacing_x + fg_pill_w;
-    if (nr_pill_w > 0) line1_w += spacing_x + nr_pill_w;
-    float line1_h = sz_fps.y;
+    ImVec2 sz_l2_tail = g_perf_line2[0] ? ImGui::CalcTextSize(g_perf_line2) : ImVec2(0, 0);
 
-    // Line 2: [Upscaler / Model] + [Scaling / MV / Reflex]
-    ImVec2 sz_line2 = ImGui::CalcTextSize(g_perf_line2);
-    float line2_w = sz_line2.x;
-    float line2_h = sz_line2.y;
+    float line2_w = sz_up.x;
+    if (fg_pill_w > 0) line2_w += spacing_x + fg_pill_w;
+    if (nr_pill_w > 0) line2_w += spacing_x + nr_pill_w;
+    if (sz_l2_tail.x > 0) line2_w += spacing_x + sz_l2_tail.x;
+    float line2_h = sz_fps.y;
 
     float card_w = fmaxf(line1_w, line2_w) + pad_x * 2.0f;
     float card_h = line1_h + line2_h + line_gap + pad_y * 2.0f;
@@ -2203,39 +2199,12 @@ static void perf_draw(const MenuTarget *t, float scale) {
 
     // Frame Time
     dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(160, 185, 215, 230), g_perf_ms_num);
-    cur_x += sz_ms.x;
 
-    // FG Pill Badge
-    if (fg_pill_w > 0) {
-        cur_x += spacing_x;
-        ImVec2 fg_min(cur_x, line1_y + 0.5f * scale);
-        ImVec2 fg_max(cur_x + fg_pill_w, line1_y + line1_h - 0.5f * scale);
-        dl->AddRectFilled(fg_min, fg_max, IM_COL32(105, 40, 175, 190), 3.0f * scale);
-        dl->AddRect(fg_min, fg_max, IM_COL32(175, 100, 250, 220), 3.0f * scale, 0, 1.0f * scale);
-        dl->AddText(ImVec2(cur_x + 4.0f * scale, line1_y), IM_COL32(245, 215, 255, 255), g_perf_fg_badge);
-        cur_x += fg_pill_w;
-    }
-
-    // NR Pill Badge
-    if (nr_pill_w > 0) {
-        cur_x += spacing_x;
-        ImVec2 nr_min(cur_x, line1_y + 0.5f * scale);
-        ImVec2 nr_max(cur_x + nr_pill_w, line1_y + line1_h - 0.5f * scale);
-        ImU32 nr_bg = g_perf_nr_active ? IM_COL32(20, 85, 25, 210) : IM_COL32(40, 60, 45, 180);
-        ImU32 nr_bd = g_perf_nr_active ? IM_COL32(80, 220, 45, 240) : IM_COL32(100, 160, 110, 200);
-        ImU32 nr_tx = g_perf_nr_active ? IM_COL32(165, 255, 135, 255) : IM_COL32(180, 210, 185, 230);
-        dl->AddRectFilled(nr_min, nr_max, nr_bg, 3.0f * scale);
-        dl->AddRect(nr_min, nr_max, nr_bd, 3.0f * scale, 0, 1.0f * scale);
-        dl->AddText(ImVec2(cur_x + 4.0f * scale, line1_y), nr_tx, g_perf_nr_badge);
-        cur_x += nr_pill_w;
-    }
-
-    // Line 2: Upscaler + Extra Badges
+    // Line 2 drawing: [Upscaler] -> [FG Badge] -> [NR Badge] -> [Tail Info]
     float line2_y = line1_y + line1_h + line_gap;
     float l2_x = p_min.x + pad_x;
 
-    // Draw upscaler portion in accent color
-    ImVec2 sz_up = ImGui::CalcTextSize(g_perf_upscaler);
+    // 1) Upscaler name & preset in theme accent color
     ImU32 up_col = (g_perf_theme == 0) ? (g_perf_nr_active ? IM_COL32(125, 245, 45, 255) : IM_COL32(118, 195, 20, 255))
                  : (g_perf_theme == 1) ? IM_COL32(255, 95, 95, 255)
                  : (g_perf_theme == 3) ? IM_COL32(30, 175, 255, 255)
@@ -2243,10 +2212,35 @@ static void perf_draw(const MenuTarget *t, float scale) {
     dl->AddText(ImVec2(l2_x, line2_y), up_col, g_perf_upscaler);
     l2_x += sz_up.x;
 
-    // Remaining text of line 2 (e.g. " | 1080p -> 4K | Hybrid MV | Reflex")
-    if (strlen(g_perf_line2) > strlen(g_perf_upscaler)) {
-        const char *tail = g_perf_line2 + strlen(g_perf_upscaler);
-        dl->AddText(ImVec2(l2_x, line2_y), IM_COL32(175, 190, 205, 225), tail);
+    // 2) Frame Generation pill badge directly adjacent to DLSS
+    if (fg_pill_w > 0) {
+        l2_x += spacing_x;
+        ImVec2 fg_min(l2_x, line2_y + 0.5f * scale);
+        ImVec2 fg_max(l2_x + fg_pill_w, line2_y + line2_h - 0.5f * scale);
+        dl->AddRectFilled(fg_min, fg_max, IM_COL32(105, 40, 175, 190), 3.0f * scale);
+        dl->AddRect(fg_min, fg_max, IM_COL32(175, 100, 250, 220), 3.0f * scale, 0, 1.0f * scale);
+        dl->AddText(ImVec2(l2_x + 4.0f * scale, line2_y), IM_COL32(245, 215, 255, 255), g_perf_fg_badge);
+        l2_x += fg_pill_w;
+    }
+
+    // 3) DLSS-NR pill badge (with preset) directly adjacent
+    if (nr_pill_w > 0) {
+        l2_x += spacing_x;
+        ImVec2 nr_min(l2_x, line2_y + 0.5f * scale);
+        ImVec2 nr_max(l2_x + nr_pill_w, line2_y + line2_h - 0.5f * scale);
+        ImU32 nr_bg = g_perf_nr_active ? IM_COL32(20, 85, 25, 210) : IM_COL32(40, 60, 45, 180);
+        ImU32 nr_bd = g_perf_nr_active ? IM_COL32(80, 220, 45, 240) : IM_COL32(100, 160, 110, 200);
+        ImU32 nr_tx = g_perf_nr_active ? IM_COL32(165, 255, 135, 255) : IM_COL32(180, 210, 185, 230);
+        dl->AddRectFilled(nr_min, nr_max, nr_bg, 3.0f * scale);
+        dl->AddRect(nr_min, nr_max, nr_bd, 3.0f * scale, 0, 1.0f * scale);
+        dl->AddText(ImVec2(l2_x + 4.0f * scale, line2_y), nr_tx, g_perf_nr_badge);
+        l2_x += nr_pill_w;
+    }
+
+    // 4) Remaining tail info: resolution, MV, Reflex
+    if (sz_l2_tail.x > 0) {
+        l2_x += spacing_x;
+        dl->AddText(ImVec2(l2_x, line2_y), IM_COL32(175, 190, 205, 225), g_perf_line2);
     }
 }
 

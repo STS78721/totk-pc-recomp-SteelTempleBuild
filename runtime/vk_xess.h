@@ -6,9 +6,11 @@
 extern "C" {
 #endif
 
-// Intel XeSS (Xe Super Sampling) Dynamic Vulkan Layer
+// Intel XeSS (Xe Super Sampling) & Intel Xe Stack
 int vk_xess_wanted(void);
 int vk_xess_available(void);
+int vk_xefg_available(void);
+int vk_xell_available(void);
 int vk_xess_is_xmx(void);
 const char *vk_xess_model_name(void);
 uint64_t vk_xess_dispatches(void);

@@ -13,11 +13,40 @@
 
 static struct {
     int available;
+    int fg_available;
+    int ll_available;
     int is_xmx;
     uint64_t dispatches;
     char version_str[32];
     HMODULE dll;
+    HMODULE fg_dll;
+    HMODULE ll_dll;
 } g_xess;
+
+#ifdef _WIN32
+static HMODULE load_intel_dll(const char *name) {
+    HMODULE h = LoadLibraryA(name);
+    if (h) return h;
+
+    char dir[MAX_PATH];
+    DWORD len = GetModuleFileNameA(NULL, dir, MAX_PATH);
+    while (len && dir[len - 1] != '\\') len--;
+    dir[len] = 0;
+
+    char full[MAX_PATH];
+    snprintf(full, sizeof full, "%s%s", dir, name);
+    h = LoadLibraryA(full);
+    if (h) return h;
+
+    snprintf(full, sizeof full, "%sbin\\%s", dir, name);
+    h = LoadLibraryA(full);
+    if (h) return h;
+
+    snprintf(full, sizeof full, "bin\\%s", name);
+    h = LoadLibraryA(full);
+    return h;
+}
+#endif
 
 int vk_xess_wanted(void) {
     const char *up = cfg_value("TOTK_UPSCALER");
@@ -26,6 +55,14 @@ int vk_xess_wanted(void) {
 
 int vk_xess_available(void) {
     return g_xess.available;
+}
+
+int vk_xefg_available(void) {
+    return g_xess.fg_available;
+}
+
+int vk_xell_available(void) {
+    return g_xess.ll_available;
 }
 
 int vk_xess_is_xmx(void) {
@@ -50,20 +87,27 @@ void vk_xess_init(void) {
     g_xess.is_xmx = vk_gpu_is_intel_arc();
 
 #ifdef _WIN32
-    g_xess.dll = LoadLibraryA("libxess.dll");
-    if (!g_xess.dll) {
-        // Try looking in GAME subdirectory or adjacent bin
-        g_xess.dll = LoadLibraryA("bin/libxess.dll");
-    }
-
+    g_xess.dll = load_intel_dll("libxess.dll");
     if (g_xess.dll) {
         g_xess.available = 1;
-        snprintf(g_xess.version_str, sizeof(g_xess.version_str), "XeSS 1.3+");
+        snprintf(g_xess.version_str, sizeof(g_xess.version_str), "XeSS 2.0+");
         rt_log("vk_xess: loaded libxess.dll successfully (hardware xmx=%d, gpu_intel=%d)",
                g_xess.is_xmx, vk_gpu_is_intel());
     } else {
         rt_log("vk_xess: libxess.dll not found in working directory (ready for drop-in, mode=%s)",
                g_xess.is_xmx ? "XMX" : "DP4a");
+    }
+
+    g_xess.fg_dll = load_intel_dll("libxess_fg.dll");
+    if (g_xess.fg_dll) {
+        g_xess.fg_available = 1;
+        rt_log("vk_xess: loaded libxess_fg.dll successfully (Intel Xe Frame Generation ready)");
+    }
+
+    g_xess.ll_dll = load_intel_dll("libxell.dll");
+    if (g_xess.ll_dll) {
+        g_xess.ll_available = 1;
+        rt_log("vk_xess: loaded libxell.dll successfully (Intel Xe Low Latency ready)");
     }
 #endif
 }
@@ -74,8 +118,18 @@ void vk_xess_release(void) {
         FreeLibrary(g_xess.dll);
         g_xess.dll = NULL;
     }
+    if (g_xess.fg_dll) {
+        FreeLibrary(g_xess.fg_dll);
+        g_xess.fg_dll = NULL;
+    }
+    if (g_xess.ll_dll) {
+        FreeLibrary(g_xess.ll_dll);
+        g_xess.ll_dll = NULL;
+    }
 #endif
     g_xess.available = 0;
+    g_xess.fg_available = 0;
+    g_xess.ll_available = 0;
 }
 
 void vk_xess_pass(VkExec *ex) {
