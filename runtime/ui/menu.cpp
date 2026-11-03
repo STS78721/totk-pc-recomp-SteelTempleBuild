@@ -888,9 +888,7 @@ static void tab_dlss_nr(float scale) {
         if (f) { fclose(f); plugin_found = true; }
     }
     const char *status_str = plugin_found ? "sl.dlss_nr.dll detected (Active)" : "Drop sl.dlss_nr.dll into GAME/ folder";
-    static const char *const stat_vals[] = {"info"};
-    const char *stat_names[] = {status_str};
-    opt_choice_list("##nr_status", UI_MENU_DLSS_NR_STATUS, stat_vals, stat_names, 1, UI_MENU_DLSS_NR_STATUS_DESC);
+    opt_button("##nr_status", UI_MENU_DLSS_NR_STATUS, UI_MENU_DLSS_NR_STATUS_DESC, status_str);
 
     opt_group(UI_MENU_MV_DEBUG);
     opt_toggle("TOTK_MV_DEBUG", UI_MENU_MV_DEBUG, UI_MENU_MV_DEBUG_DESC);
