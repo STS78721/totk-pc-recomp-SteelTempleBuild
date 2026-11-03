@@ -49,6 +49,16 @@ The **Beta 3 Unified Release** (`v0.3.4-beta-3-steeltemple`) incorporates the fu
 7. **PS5 DualSense Controller Architectural Blueprint**
    - Detailed architecture published for dynamic adaptive triggers (bow draw resistance and string snap release), 4-channel controller audio routing for archery sound effects, and automatic in-game button prompt detection (PlayStation vs Xbox vs Nintendo).
 
+8. **Cave Entrance & Interior Black Screen Flicker Elimination (Hotfix)**
+   - **Resolved Issue**: Fixed a bug where entering or approaching caves caused rapid in-and-out black screen flickering with upscalers active (both NVIDIA DLSS and AMD FSR) while the 2D HUD remained fully drawn at high framerates.
+   - **Sub-Pass Isolation**: In dark environments, TotK dispatches a half-resolution (`960x540`) pass for volumetric fog and cave interior depth. The G-buffer registration now strictly enforces the configured scene resolution (`s[0]`), completely preventing sub-resolution passes from prematurely hijacking the upscaler pipeline.
+   - **Output Target Verification**: Scaling passes are now strictly required to target output presentation resolution (`o[0]`), ensuring the final display target is never skipped or left unwritten.
+   - **Skipped-Bloom Fallback**: Added in-place fallback evaluation for DLAA in deep caves where the engine dynamically skips the bloom downsampling chain.
+
+9. **Physically Accurate Frame Generation Telemetry & Optical Flow Overhead Modeling**
+   - Implemented dual-rate cadence telemetry (`● [Net FPS] (Base [Base FPS])`) on Line 1 of the HUD.
+   - Replaced theoretical integer multipliers with real-world Optical Flow Accelerator (OFA) compute overhead modeling, matching NVIDIA FrameView, PresentMon, and RTSS.
+
 ---
 
 <p align="center">
