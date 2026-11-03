@@ -1,5 +1,5 @@
 #version 450
-// High-Fidelity Ambient Occlusion (Native AO, SSAO, HBAO, Intel XeGTAO) & Denoised Ray-Traced Global Illumination (RTGi)
+// High-Fidelity Ambient Occlusion (Native AO, SSAO, HBAO, Intel XeGTAO)
 // Screen-space compute pass operating on linear depth and lit HDR scene color (runtime/vk_contact.c).
 layout(local_size_x = 8, local_size_y = 8) in;
 
@@ -10,7 +10,7 @@ layout(push_constant) uniform Params {
     vec4 proj;    // x: proj.x, y: proj.y, z: far plane, w: ao strength (0..1)
     vec4 light;   // xyz: view-space sun direction, w: march length at 10m
     vec4 size;    // x: w, y: h, z: 1/w, w: 1/h
-    vec4 opt;     // x: visualizer (0: off, 1: rtgi only, 2: ao only, 3: normals), y: ao_mode (0: native, 1: ssao, 2: hbao, 3: xegtao), z: rtgi_mode (0: off, 1: low, 2: med, 3: high, 4: ultra), w: rtgi_bounce
+    vec4 opt;     // x: visualizer (1: ao debug in grey), y: ao_mode (0: native, 1: ssao, 2: hbao, 3: xegtao)
 } pc;
 
 vec3 view_pos(vec2 uv, float z) {
@@ -47,7 +47,7 @@ vec3 reconstruct_normal(ivec2 px, vec2 uv, float z) {
     return (n.z > 0.0) ? -n : n;
 }
 
-// Original rock-solid directional sun contact march (for Native, SSAO, and HBAO)
+// Directional sun contact march (for Native, SSAO, and HBAO)
 float evaluate_sun_contact(ivec2 px, vec2 uv, vec3 p, float z, int steps, float extra_radius) {
     float len = pc.light.w * clamp(z / 10.0, 0.4, 3.2) * extra_radius;
     float thick = 0.16 + z * 0.012;
@@ -131,68 +131,6 @@ float evaluate_xegtao(ivec2 px, vec2 uv, vec3 p, vec3 n, float z, vec3 albedo) {
     return clamp(multi.r * 0.3 + multi.g * 0.59 + multi.b * 0.11, 0.0, 1.0);
 }
 
-// Ray-Traced Global Illumination: Diffuse hemisphere ray-marching with firefly suppression
-vec3 sample_rtgi_ray(ivec2 px, vec2 uv, vec3 p, vec3 n, float z, int num_rays, int num_steps, float seed) {
-    vec3 bounce_light = vec3(0.0);
-    const float PI = 3.14159265359;
-
-    for (int r = 0; r < num_rays; r++) {
-        // Stratified Fibonacci hemisphere distribution around normal n
-        float u1 = fract(seed * 0.61803398875 + float(r) / float(num_rays));
-        float u2 = fract(seed + float(r) * 0.38196601125);
-        float phi = 2.0 * PI * u1;
-        float cos_theta = sqrt(u2);
-        float sin_theta = sqrt(max(0.0, 1.0 - u2));
-
-        vec3 tangent = normalize(abs(n.z) < 0.99 ? cross(n, vec3(0, 0, 1)) : cross(n, vec3(0, 1, 0)));
-        vec3 bitangent = cross(n, tangent);
-        vec3 ray_dir = normalize(tangent * (cos(phi) * sin_theta) + bitangent * (sin(phi) * sin_theta) + n * cos_theta);
-
-        float max_march_dist = min(16.0, z * 0.8 + 2.5);
-        float step_size = max_march_dist / float(num_steps);
-        float t = step_size * (0.3 + 0.7 * fract(seed * 2.7182818 + float(r) * 0.5));
-
-        for (int s = 0; s < num_steps; s++, t += step_size) {
-            vec3 q = p + ray_dir * t;
-            if (q.z >= -0.05) break;
-            vec2 quv = to_uv(q);
-            if (quv.x < 0.002 || quv.x > 0.998 || quv.y < 0.002 || quv.y > 0.998) break;
-
-            float sz = texelFetch(lin_depth, ivec2(quv * pc.size.xy), 0).x * pc.proj.z;
-            float delta = -q.z - sz;
-            float thickness = 0.35 + z * 0.02;
-
-            if (delta > 0.025 && delta < thickness) {
-                vec4 hit_color = imageLoad(scene, ivec2(quv * pc.size.xy));
-                float falloff = clamp(1.0 - (t / max_march_dist), 0.0, 1.0);
-                float n_dot_l = max(0.0, dot(n, ray_dir));
-
-                vec3 col = hit_color.rgb;
-                float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-                // Reinhard luminance compression to eliminate fireflies and specular noise
-                vec3 compressed = col / (1.0 + max(0.0, lum));
-
-                bounce_light += max(vec3(0.0), compressed) * (n_dot_l * falloff * falloff);
-                break;
-            }
-        }
-    }
-    vec3 avg = bounce_light / float(num_rays);
-    // Uncompress Reinhard curve
-    return avg / max(vec3(0.001), vec3(1.0) - min(vec3(0.95), avg));
-}
-
-// RTGi Evaluation with Adaptive Filtering
-vec3 evaluate_rtgi_denoised(ivec2 px, vec2 uv, vec3 p, vec3 n, float z, int tier, float bounce_str) {
-    if (tier <= 0 || bounce_str <= 0.01) return vec3(0.0);
-    int num_rays = (tier == 1) ? 3 : (tier == 2) ? 6 : (tier == 3) ? 10 : 16;
-    int num_steps = (tier == 1) ? 12 : (tier == 2) ? 16 : (tier == 3) ? 22 : 30;
-
-    float seed = ign(vec2(px));
-    vec3 light = sample_rtgi_ray(px, uv, p, n, z, num_rays, num_steps, seed);
-    return light * (bounce_str * 1.35);
-}
-
 void main() {
     ivec2 px = ivec2(gl_GlobalInvocationID.xy);
     if (px.x >= int(pc.size.x) || px.y >= int(pc.size.y)) return;
@@ -203,24 +141,13 @@ void main() {
 
     vec2 uv = (vec2(px) + 0.5) * pc.size.zw;
     vec3 p = view_pos(uv, z);
-    vec4 c = imageLoad(scene, px);
-    vec3 n = reconstruct_normal(px, uv, z);
 
-    int visualizer = int(pc.opt.x + 0.5);
     int ao_mode = int(pc.opt.y + 0.5);
-    int rtgi_tier = int(pc.opt.z + 0.5);
-    float rtgi_bounce = pc.opt.w;
-
-    // Visualizer Mode 3: Reconstructed 3D Surface Normals in RGB
-    if (visualizer == 3) {
-        imageStore(scene, px, vec4(n * 0.5 + 0.5, 1.0));
-        return;
-    }
-
     float k = 1.0;
 
     if (ao_mode == 3) {
-        // Intel XeGTAO Ground Truth Ambient Occlusion
+        vec4 c = imageLoad(scene, px);
+        vec3 n = reconstruct_normal(px, uv, z);
         k = evaluate_xegtao(px, uv, p, n, z, c.rgb);
     } else if (ao_mode == 2) {
         // HBAO (Horizon-Based): High-quality 24-step directional sun march with depth penumbra
@@ -233,26 +160,12 @@ void main() {
         k = evaluate_sun_contact(px, uv, p, z, 16, 1.0);
     }
 
-    // Visualizer Mode 2: Pure Ambient Occlusion / HBAO / XeGTAO Mask in Greyscale
-    if (visualizer == 2) {
+    if (pc.opt.x > 0.5) {
         imageStore(scene, px, vec4(k, k, k, 1.0));
         return;
     }
 
-    // Evaluate Denoised Ray-Traced Global Illumination (RTGi) indirect diffuse bounce
-    vec3 indirect_bounce = vec3(0.0);
-    if (rtgi_tier > 0) {
-        indirect_bounce = evaluate_rtgi_denoised(px, uv, p, n, z, rtgi_tier, rtgi_bounce);
-    }
-
-    // Visualizer Mode 1: Pure RTGi Indirect Bounce ONLY (ambient color bleeding)
-    if (visualizer == 1) {
-        imageStore(scene, px, vec4(indirect_bounce * 2.0, 1.0));
-        return;
-    }
-
-    if (rtgi_tier == 0 && k >= 0.999) return;
-
-    vec3 final_color = c.rgb * k + indirect_bounce;
-    imageStore(scene, px, vec4(final_color, c.a));
+    if (k >= 0.999) return;
+    vec4 c = imageLoad(scene, px);
+    imageStore(scene, px, vec4(c.rgb * k, c.a));
 }

@@ -544,8 +544,7 @@ static bool rows_upscaler(void) {
     bool ask_restart = false;
     static const char *const up_vals[] = {"dlss", "fsr4", "fsr", "bilinear"};
     const char *dp = cfg_value("TOTK_DLSS_PRESET");
-    const char *dlss_title = (!strcmp(dp, "preset_f")) ? "NVIDIA DLSS 3.5 (Ray Reconstruction)"
-                           : (!strcmp(dp, "preset_m") || !strcmp(dp, "preset_l")) ? "NVIDIA DLSS 4.5"
+    const char *dlss_title = (!strcmp(dp, "preset_m") || !strcmp(dp, "preset_l")) ? "NVIDIA DLSS 4.5"
                            : (!strcmp(dp, "preset_k") || !strcmp(dp, "preset_j")) ? "NVIDIA DLSS 4"
                            : (!strcmp(dp, "preset_e") || !strcmp(dp, "preset_c")) ? "NVIDIA DLSS 3 (CNN)"
                                                                                    : "NVIDIA DLSS 4 / 4.5";
@@ -591,13 +590,13 @@ static bool rows_upscaler(void) {
             ask_restart = true;
     }
     if (is_dlss) {
-        static const char *const model_vals[] = {"preset_f", "preset_k", "preset_j", "preset_m", "preset_l", "preset_e",
-                                                 "preset_c", "default"};
+        static const char *const model_vals[] = {"preset_k", "preset_j", "preset_m", "preset_l", "preset_e", "preset_c",
+                                                 "default"};
         static const char *const model_names[] = {
-            "DLSS 3.5 Ray Reconstruction (Preset F)", "DLSS 4 (Preset K)", "DLSS 4 (Preset J)",
+            "DLSS 4 (Preset K)", "DLSS 4 (Preset J)",
             "DLSS 4.5 Perf (Preset M)", "DLSS 4.5 UltraPerf (Preset L)",
             "DLSS 3 CNN (Preset E)", "DLSS 3 CNN (Preset C)", "Default (Auto)"};
-        opt_choice_list("TOTK_DLSS_PRESET", UI_MENU_DLSS_MODEL, model_vals, model_names, 8, UI_MENU_DLSS_MODEL_DESC);
+        opt_choice_list("TOTK_DLSS_PRESET", UI_MENU_DLSS_MODEL, model_vals, model_names, 7, UI_MENU_DLSS_MODEL_DESC);
     }
     if (is_fsr) {
         opt_slider("TOTK_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");
@@ -701,21 +700,6 @@ static void rows_ao(void) {
         int s = cfg_int("TOTK_CONTACT_SHADOWS");
         cfg_set("TOTK_AO_MODE", s >= 80 ? "xegtao" : s >= 50 ? "hbao" : s >= 30 ? "ssao" : "native");
         cfg_save();
-    }
-}
-
-static void rows_rtgi(void) {
-    static const char *const rt_vals[] = {"off", "low", "medium", "high", "ultra"};
-    static const char *const rt_names[] = {"Off", "Low (2 rays / 10 steps)", "Medium (4 rays / 14 steps)", "High (6 rays / 20 steps)", "Ultra (8 rays / 28 steps)"};
-    if (opt_choice_list("TOTK_RTGI", UI_MENU_RTGI, rt_vals, rt_names, 5, UI_MENU_RTGI_DESC)) {
-        cfg_save();
-    }
-    const char *rt = cfg_value("TOTK_RTGI");
-    if (strcmp(rt, "off")) {
-        opt_slider("TOTK_RTGI_BOUNCE", UI_MENU_RTGI_BOUNCE, 0, 200, UI_MENU_RTGI_BOUNCE_DESC, 10, "%.0f %%");
-        static const char *const dbg_vals[] = {"off", "rtgi_only", "ao_only", "normals"};
-        static const char *const dbg_names[] = {"Off (Normal Game)", "RTGi Diffuse Bounce Only", "XeGTAO Occlusion Mask Only", "Reconstructed 3D Normals"};
-        opt_choice_list("TOTK_RTGI_DEBUG", UI_MENU_RTGI_DEBUG, dbg_vals, dbg_names, 4, UI_MENU_RTGI_DEBUG_DESC);
     }
 }
 
@@ -851,7 +835,6 @@ static void tab_screen(float scale) {
     row_shadow_range();
     opt_slider("TOTK_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
     rows_ao();
-    rows_rtgi();
     rows_color();
     opt_group(UI_MENU_HDR_GROUP);
     opt_toggle("TOTK_HDR", UI_MENU_HDR, UI_MENU_HDR_DESC);
@@ -1309,7 +1292,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     // the port version and the game update, right-aligned on the title line: what a bug report needs first
     char game[16], version[128], pver[64];
     snprintf(game, sizeof game, "%d.%d.%d", rt_game_version / 100, rt_game_version / 10 % 10, rt_game_version % 10);
-    snprintf(pver, sizeof pver, "%s-rtgi-xegtao", rt_port_version);
+    snprintf(pver, sizeof pver, "%s-xegtao", rt_port_version);
     snprintf(version, sizeof version, menu_text(UI_MENU_VERSION), pver, game);
     ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(version).x);
     ImGui::TextDisabled("%s", version);
