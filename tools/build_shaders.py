@@ -18,6 +18,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BIN = Path(r'C:\msys64\ucrt64\bin')   # Windows; elsewhere glslc and spirv-val come from PATH
+import shutil
+GLSLC = shutil.which('glslc') or (str(BIN / 'glslc.exe') if Path(BIN / 'glslc.exe').exists() else r'C:\VulkanSDK\1.4.363.0\Bin\glslc.exe')
+SPIRV_VAL = shutil.which('spirv-val') or (str(BIN / 'spirv-val.exe') if Path(BIN / 'spirv-val.exe').exists() else r'C:\VulkanSDK\1.4.363.0\Bin\spirv-val.exe')
 WIN = os.name == 'nt'
 TARGET = 'vulkan1.1'
 STAGES = {'.comp': 'compute', '.vert': 'vertex', '.frag': 'fragment'}
@@ -61,9 +64,9 @@ def stale(runtime):
 def compile_one(src):
     with tempfile.TemporaryDirectory() as tmp:
         spv = Path(tmp) / 'out.spv'
-        subprocess.run([str(BIN / 'glslc.exe') if WIN else 'glslc', '-O', f'--target-env={TARGET}', f'-fshader-stage={STAGES[src.suffix]}',
+        subprocess.run([str(GLSLC), '-O', f'--target-env={TARGET}', f'-fshader-stage={STAGES[src.suffix]}',
                         '-o', str(spv), str(src)], check=True)
-        subprocess.run([str(BIN / 'spirv-val.exe') if WIN else 'spirv-val', f'--target-env', TARGET, str(spv)], check=True)
+        subprocess.run([str(SPIRV_VAL), f'--target-env', TARGET, str(spv)], check=True)
         data = spv.read_bytes()
     words = [int.from_bytes(data[i:i + 4], 'little') for i in range(0, len(data), 4)]
     header_path(src).write_text(header_of(src, words), encoding='utf-8', newline='\n')

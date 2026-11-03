@@ -1,20 +1,19 @@
 #version 450
-// Screen-space contact shadows (runtime/vk_contact.c). Each pixel of the game's lit scene colour marches a short way
-// toward the sun through the linear depth target; when the ray passes behind something close in front of it, the pixel
-// is in a contact shadow the shadow maps are too coarse to show, and its colour is darkened.
+// Next-Gen Ambient Occlusion (Native AO, SSAO, HBAO, Intel XeGTAO) & Ray-Traced Global Illumination (RTGi)
+// Screen-space compute pass operating on linear depth and lit HDR scene color (runtime/vk_contact.c).
 layout(local_size_x = 8, local_size_y = 8) in;
 
-layout(binding = 0) uniform sampler2D lin_depth;                // the game's linear depth: view distance / far
-layout(binding = 1, r11f_g11f_b10f) uniform image2D scene;      // the lit scene colour, darkened in place
+layout(binding = 0) uniform sampler2D lin_depth;                // linear depth: view distance / far
+layout(binding = 1, r11f_g11f_b10f) uniform image2D scene;      // lit scene color
 
 layout(push_constant) uniform Params {
-    vec4 proj;    // projection x scale, y scale, far plane, strength (0..1)
-    vec4 light;   // view-space direction toward the sun (xyz), march length in metres at 10 m (w)
-    vec4 size;    // width, height, 1/width, 1/height
-    vec4 opt;     // x: debug (1: write the shadow factor as grey)
+    vec4 proj;    // x: proj.x, y: proj.y, z: far plane, w: ao strength (0..1)
+    vec4 light;   // xyz: view-space sun direction, w: march length at 10m
+    vec4 size;    // x: w, y: h, z: 1/w, w: 1/h
+    vec4 opt;     // x: debug (1: grey factor), y: ao_mode (0: native, 1: ssao, 2: hbao, 3: xegtao), z: rtgi_mode (0: off, 1: low, 2: med, 3: high, 4: ultra), w: rtgi_bounce
 } pc;
 
-vec3 view_pos(vec2 uv, float z) {   // z: distance in front of the camera
+vec3 view_pos(vec2 uv, float z) {
     vec2 ndc = uv * 2.0 - 1.0;
     return vec3(ndc.x * z / pc.proj.x, -ndc.y * z / pc.proj.y, -z);
 }
@@ -24,8 +23,138 @@ vec2 to_uv(vec3 p) {
     return vec2(0.5 + 0.5 * p.x * pc.proj.x / z, 0.5 - 0.5 * p.y * pc.proj.y / z);
 }
 
-float ign(vec2 px) {   // interleaved gradient noise: a per-pixel start offset that hides the step pattern
+float ign(vec2 px) {
     return fract(52.9829189 * fract(dot(px, vec2(0.06711056, 0.00583715))));
+}
+
+// Reconstruct view-space normal from linear depth using cross-bilateral filter
+vec3 reconstruct_normal(ivec2 px, vec2 uv, float z) {
+    vec2 d = pc.size.zw;
+    float z_l = texelFetch(lin_depth, px - ivec2(1, 0), 0).x * pc.proj.z;
+    float z_r = texelFetch(lin_depth, px + ivec2(1, 0), 0).x * pc.proj.z;
+    float z_d = texelFetch(lin_depth, px - ivec2(0, 1), 0).x * pc.proj.z;
+    float z_u = texelFetch(lin_depth, px + ivec2(0, 1), 0).x * pc.proj.z;
+
+    vec3 p = view_pos(uv, z);
+    vec3 pl = view_pos(uv - vec2(d.x, 0.0), (z_l > 0.0) ? z_l : z);
+    vec3 pr = view_pos(uv + vec2(d.x, 0.0), (z_r > 0.0) ? z_r : z);
+    vec3 pd = view_pos(uv - vec2(0.0, d.y), (z_d > 0.0) ? z_d : z);
+    vec3 pu = view_pos(uv + vec2(0.0, d.y), (z_u > 0.0) ? z_u : z);
+
+    vec3 dx = (abs(pr.z - p.z) < abs(pl.z - p.z)) ? (pr - p) : (p - pl);
+    vec3 dy = (abs(pu.z - p.z) < abs(pd.z - p.z)) ? (pu - p) : (p - pd);
+    vec3 n = normalize(cross(dx, dy));
+    return (n.z > 0.0) ? -n : n;
+}
+
+// Intel XeGTAO: Multi-slice horizon search with multi-bounce color conservation
+float evaluate_xegtao(ivec2 px, vec2 uv, vec3 p, vec3 n, float z, vec3 albedo) {
+    float noise = ign(vec2(px));
+    const int SLICES = 3;
+    const int SAMPLES_PER_SLICE = 4;
+    float radius = clamp(1.2 * (10.0 / max(z, 2.0)), 0.02, 0.15); // screen-space search radius
+    float occlusion = 0.0;
+    const float PI = 3.14159265;
+
+    for (int s = 0; s < SLICES; s++) {
+        float phi = (float(s) + noise) * (PI / float(SLICES));
+        vec2 dir = vec2(cos(phi), sin(phi)) * pc.size.zw;
+        float h1 = -1.0;
+        float h2 = -1.0;
+
+        for (int i = 1; i <= SAMPLES_PER_SLICE; i++) {
+            float frac = float(i) / float(SAMPLES_PER_SLICE);
+            float r = frac * frac * radius;
+
+            // Positive direction
+            vec2 uv_pos = uv + dir * (r * pc.size.xy);
+            if (uv_pos.x >= 0.0 && uv_pos.x <= 1.0 && uv_pos.y >= 0.0 && uv_pos.y <= 1.0) {
+                float sz_pos = texelFetch(lin_depth, ivec2(uv_pos * pc.size.xy), 0).x * pc.proj.z;
+                if (sz_pos > 0.0) {
+                    vec3 q_pos = view_pos(uv_pos, sz_pos);
+                    vec3 v_pos = q_pos - p;
+                    float dist = length(v_pos);
+                    if (dist > 0.001 && dist < 3.5) {
+                        float cos_theta = dot(v_pos / dist, n);
+                        float falloff = clamp(1.0 - (dist / 3.5), 0.0, 1.0);
+                        h1 = max(h1, cos_theta * falloff);
+                    }
+                }
+            }
+
+            // Negative direction
+            vec2 uv_neg = uv - dir * (r * pc.size.xy);
+            if (uv_neg.x >= 0.0 && uv_neg.x <= 1.0 && uv_neg.y >= 0.0 && uv_neg.y <= 1.0) {
+                float sz_neg = texelFetch(lin_depth, ivec2(uv_neg * pc.size.xy), 0).x * pc.proj.z;
+                if (sz_neg > 0.0) {
+                    vec3 q_neg = view_pos(uv_neg, sz_neg);
+                    vec3 v_neg = q_neg - p;
+                    float dist = length(v_neg);
+                    if (dist > 0.001 && dist < 3.5) {
+                        float cos_theta = dot(v_neg / dist, n);
+                        float falloff = clamp(1.0 - (dist / 3.5), 0.0, 1.0);
+                        h2 = max(h2, cos_theta * falloff);
+                    }
+                }
+            }
+        }
+        occlusion += clamp((max(0.0, h1) + max(0.0, h2)) * 0.5, 0.0, 1.0);
+    }
+    occlusion /= float(SLICES);
+    float ao = clamp(1.0 - occlusion * pc.proj.w * 1.3, 0.0, 1.0);
+
+    // Intel XeGTAO / Jimenez multi-bounce color approximation:
+    // Prevents over-darkening on bright or saturated materials
+    vec3 a = clamp(albedo, 0.0, 1.0);
+    vec3 multi = vec3(ao) / (vec3(1.0) - a * (1.0 - ao) * 0.65);
+    return clamp(multi.r * 0.3 + multi.g * 0.59 + multi.b * 0.11, 0.0, 1.0);
+}
+
+// Ray-Traced Global Illumination: Diffuse hemisphere ray-marching & indirect color bounce
+vec3 evaluate_rtgi(ivec2 px, vec2 uv, vec3 p, vec3 n, float z, int tier, float bounce_str) {
+    if (tier <= 0 || bounce_str <= 0.01) return vec3(0.0);
+    int num_rays = (tier == 1) ? 2 : (tier == 2) ? 3 : (tier == 3) ? 4 : 6;
+    int num_steps = (tier == 1) ? 8 : (tier == 2) ? 12 : (tier == 3) ? 16 : 20;
+
+    float seed = ign(vec2(px));
+    vec3 bounce_light = vec3(0.0);
+    const float PI = 3.14159265;
+
+    for (int r = 0; r < num_rays; r++) {
+        // Cosine-weighted hemisphere ray distribution around normal n
+        float phi = 2.0 * PI * fract(seed + float(r) * 0.61803398875);
+        float cos_theta = sqrt(fract(seed * 1.618 + float(r) / float(num_rays)));
+        float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+
+        vec3 tangent = normalize(abs(n.z) < 0.99 ? cross(n, vec3(0, 0, 1)) : cross(n, vec3(0, 1, 0)));
+        vec3 bitangent = cross(n, tangent);
+        vec3 ray_dir = normalize(tangent * (cos(phi) * sin_theta) + bitangent * (sin(phi) * sin_theta) + n * cos_theta);
+
+        float max_march_dist = min(12.0, z * 0.6 + 2.0);
+        float step_size = max_march_dist / float(num_steps);
+        float t = step_size * (0.3 + 0.7 * seed);
+
+        for (int s = 0; s < num_steps; s++, t += step_size) {
+            vec3 q = p + ray_dir * t;
+            if (q.z >= -0.05) break;
+            vec2 quv = to_uv(q);
+            if (quv.x < 0.0 || quv.x > 1.0 || quv.y < 0.0 || quv.y > 1.0) break;
+
+            float sz = texelFetch(lin_depth, ivec2(quv * pc.size.xy), 0).x * pc.proj.z;
+            float delta = -q.z - sz;
+            float thickness = 0.2 + z * 0.015;
+
+            if (delta > 0.03 && delta < thickness) {
+                // Ray hit surface: sample radiant scene color at hit location
+                vec4 hit_color = imageLoad(scene, ivec2(quv * pc.size.xy));
+                float falloff = clamp(1.0 - (t / max_march_dist), 0.0, 1.0);
+                float n_dot_l = max(0.0, dot(n, ray_dir));
+                bounce_light += hit_color.rgb * n_dot_l * falloff;
+                break;
+            }
+        }
+    }
+    return (bounce_light / float(num_rays)) * (bounce_str * 0.35);
 }
 
 void main() {
@@ -34,34 +163,74 @@ void main() {
     float d = texelFetch(lin_depth, px, 0).x;
     if (d <= 0.0 || d >= 0.999) return;   // nothing drawn, or the sky
     float z = d * pc.proj.z;
-    if (z > 80.0) return;
+    if (z > 90.0) return;
+
     vec2 uv = (vec2(px) + 0.5) * pc.size.zw;
     vec3 p = view_pos(uv, z);
-    // the march grows with distance, as one pixel covers more ground; thickness keeps thin blades from hiding the sky
-    float len = pc.light.w * clamp(z / 10.0, 0.4, 3.0);
-    float thick = 0.15 + z * 0.01;
-    const int STEPS = 16;
-    float step_len = len / float(STEPS), t = step_len * (0.25 + ign(vec2(px)));
-    float occ = 0.0;
-    for (int i = 0; i < STEPS; i++, t += step_len) {
-        vec3 q = p + pc.light.xyz * t;
-        if (q.z >= -0.05) break;
-        vec2 quv = to_uv(q);
-        if (any(lessThan(quv, vec2(0.0))) || any(greaterThan(quv, vec2(1.0)))) break;
-        float sz = texelFetch(lin_depth, ivec2(quv * pc.size.xy), 0).x * pc.proj.z;
-        float delta = -q.z - sz;   // how far the scene at that pixel is in front of the ray point
-        if (delta > 0.02 + z * 0.002 && delta < thick) {
-            occ = 1.0 - float(i) / float(STEPS);   // a hit close to the pixel shadows more than one at the end
-            break;
+    vec4 c = imageLoad(scene, px);
+    vec3 n = reconstruct_normal(px, uv, z);
+
+    int ao_mode = int(pc.opt.y + 0.5);
+    int rtgi_tier = int(pc.opt.z + 0.5);
+    float rtgi_bounce = pc.opt.w;
+
+    float k = 1.0;
+
+    if (ao_mode == 3) {
+        // Intel XeGTAO Ground Truth Ambient Occlusion
+        k = evaluate_xegtao(px, uv, p, n, z, c.rgb);
+    } else if (ao_mode == 2) {
+        // HBAO (Horizon-Based Ambient Occlusion)
+        float noise = ign(vec2(px));
+        float h_occ = 0.0;
+        const int DIRS = 4;
+        for (int i = 0; i < DIRS; i++) {
+            float ang = (float(i) + noise) * (6.2831853 / float(DIRS));
+            vec2 dir = vec2(cos(ang), sin(ang)) * pc.size.zw * 8.0;
+            vec2 suv = uv + dir;
+            if (suv.x >= 0.0 && suv.x <= 1.0 && suv.y >= 0.0 && suv.y <= 1.0) {
+                float sz = texelFetch(lin_depth, ivec2(suv * pc.size.xy), 0).x * pc.proj.z;
+                if (sz > 0.0 && sz < z) {
+                    float diff = z - sz;
+                    if (diff < 1.5) h_occ += clamp(diff / 1.5, 0.0, 1.0);
+                }
+            }
         }
+        k = clamp(1.0 - (h_occ / float(DIRS)) * pc.proj.w * 0.9, 0.0, 1.0);
+    } else {
+        // Native / SSAO directional contact march toward sun
+        float len = pc.light.w * clamp(z / 10.0, 0.4, 3.0);
+        float thick = 0.15 + z * 0.01;
+        const int STEPS = 16;
+        float step_len = len / float(STEPS), t = step_len * (0.25 + ign(vec2(px)));
+        float occ = 0.0;
+        for (int i = 0; i < STEPS; i++, t += step_len) {
+            vec3 q = p + pc.light.xyz * t;
+            if (q.z >= -0.05) break;
+            vec2 quv = to_uv(q);
+            if (any(lessThan(quv, vec2(0.0))) || any(greaterThan(quv, vec2(1.0)))) break;
+            float sz = texelFetch(lin_depth, ivec2(quv * pc.size.xy), 0).x * pc.proj.z;
+            float delta = -q.z - sz;
+            if (delta > 0.02 + z * 0.002 && delta < thick) {
+                occ = 1.0 - float(i) / float(STEPS);
+                break;
+            }
+        }
+        float fade = 1.0 - smoothstep(45.0, 90.0, z);
+        k = 1.0 - pc.proj.w * occ * fade;
     }
-    float fade = 1.0 - smoothstep(40.0, 80.0, z);
-    float k = 1.0 - pc.proj.w * occ * fade;
+
     if (pc.opt.x > 0.5) {
         imageStore(scene, px, vec4(k, k, k, 1.0));
         return;
     }
-    if (k >= 0.999) return;
-    vec4 c = imageLoad(scene, px);
-    imageStore(scene, px, vec4(c.rgb * k, c.a));
+
+    // Evaluate Ray-Traced Global Illumination (RTGi) indirect diffuse bounce
+    vec3 indirect_bounce = vec3(0.0);
+    if (rtgi_tier > 0) {
+        indirect_bounce = evaluate_rtgi(px, uv, p, n, z, rtgi_tier, rtgi_bounce);
+    }
+
+    vec3 final_color = c.rgb * k + indirect_bounce;
+    imageStore(scene, px, vec4(final_color, c.a));
 }

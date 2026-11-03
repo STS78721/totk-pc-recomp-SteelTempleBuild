@@ -686,19 +686,32 @@ static void row_shadow_range(void) {
 }
 
 static void rows_ao(void) {
-    static const char *const vals[] = {"native", "ssao", "hbao", "off"};
-    static const char *const names[] = {"Native AO (Default)", "SSAO (Enhanced)", "HBAO (Horizon-Based)", "Off"};
-    if (opt_choice_list("TOTK_AO_MODE", UI_MENU_AO_MODE, vals, names, 4, UI_MENU_AO_MODE_DESC)) {
+    static const char *const vals[] = {"native", "ssao", "hbao", "xegtao", "off"};
+    static const char *const names[] = {"Native AO (Default)", "SSAO (Enhanced)", "HBAO (Horizon-Based)", "Intel XeGTAO (Ground Truth)", "Off"};
+    if (opt_choice_list("TOTK_AO_MODE", UI_MENU_AO_MODE, vals, names, 5, UI_MENU_AO_MODE_DESC)) {
         const char *m = cfg_value("TOTK_AO_MODE");
-        if (!strcmp(m, "hbao")) cfg_set("TOTK_CONTACT_SHADOWS", "100");
+        if (!strcmp(m, "xegtao")) cfg_set("TOTK_CONTACT_SHADOWS", "100");
+        else if (!strcmp(m, "hbao")) cfg_set("TOTK_CONTACT_SHADOWS", "100");
         else if (!strcmp(m, "ssao")) cfg_set("TOTK_CONTACT_SHADOWS", "50");
         else cfg_set("TOTK_CONTACT_SHADOWS", "0");
         cfg_save();
     }
     if (opt_slider("TOTK_CONTACT_SHADOWS", UI_MENU_CONTACT_SHADOWS, 0, 100, UI_MENU_CONTACT_SHADOWS_DESC, 10, "%.0f %%")) {
         int s = cfg_int("TOTK_CONTACT_SHADOWS");
-        cfg_set("TOTK_AO_MODE", s >= 80 ? "hbao" : s >= 30 ? "ssao" : "native");
+        cfg_set("TOTK_AO_MODE", s >= 80 ? "xegtao" : s >= 50 ? "hbao" : s >= 30 ? "ssao" : "native");
         cfg_save();
+    }
+}
+
+static void rows_rtgi(void) {
+    static const char *const rt_vals[] = {"off", "low", "medium", "high", "ultra"};
+    static const char *const rt_names[] = {"Off", "Low (2 rays / 8 steps)", "Medium (3 rays / 12 steps)", "High (4 rays / 16 steps)", "Ultra (6 rays / 20 steps)"};
+    if (opt_choice_list("TOTK_RTGI", UI_MENU_RTGI, rt_vals, rt_names, 5, UI_MENU_RTGI_DESC)) {
+        cfg_save();
+    }
+    const char *rt = cfg_value("TOTK_RTGI");
+    if (strcmp(rt, "off")) {
+        opt_slider("TOTK_RTGI_BOUNCE", UI_MENU_RTGI_BOUNCE, 0, 200, UI_MENU_RTGI_BOUNCE_DESC, 10, "%.0f %%");
     }
 }
 
@@ -834,6 +847,7 @@ static void tab_screen(float scale) {
     row_shadow_range();
     opt_slider("TOTK_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
     rows_ao();
+    rows_rtgi();
     rows_color();
     opt_group(UI_MENU_HDR_GROUP);
     opt_toggle("TOTK_HDR", UI_MENU_HDR, UI_MENU_HDR_DESC);
@@ -1291,7 +1305,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     // the port version and the game update, right-aligned on the title line: what a bug report needs first
     char game[16], version[128], pver[64];
     snprintf(game, sizeof game, "%d.%d.%d", rt_game_version / 100, rt_game_version / 10 % 10, rt_game_version % 10);
-    snprintf(pver, sizeof pver, "%s-alpha-fg", rt_port_version);
+    snprintf(pver, sizeof pver, "%s-rtgi-xegtao", rt_port_version);
     snprintf(version, sizeof version, menu_text(UI_MENU_VERSION), pver, game);
     ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(version).x);
     ImGui::TextDisabled("%s", version);

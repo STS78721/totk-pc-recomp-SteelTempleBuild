@@ -164,8 +164,14 @@
 # Frame Generation multiplier: 2x (Standard FG on RTX 40+ / FSR FG), 4x or 6x (Multi-Frame Generation, requires
 # NVIDIA GeForce RTX 50 Series Blackwell GPU; automatically clamped to 2x on older GPUs or FSR FG).
 # fg_mult = 2x
-# Ambient occlusion mode: native (game's own AO + contact shadows), ssao (enhanced), hbao (horizon-based) or off.
+# Ambient occlusion mode: native (game's own AO + contact shadows), ssao (enhanced), hbao (horizon-based),
+# xegtao (Intel XeGTAO Ground Truth Ambient Occlusion with multi-bounce color conservation) or off.
 # ao_mode = native
+# Ray-Traced Global Illumination (RTGi): off, low (2 rays / 8 steps), medium (3 rays / 12 steps), high (4 rays / 16 steps),
+# or ultra (6 rays / 20 steps). Screen-space diffuse path tracing that adds realistic indirect light bouncing and color bleeding.
+# rtgi = off
+# RTGi indirect bounce lighting intensity in percent (0 to 200; 100 = default).
+# rtgi_bounce = 100
 # Picture shape when the window's shape differs from the game resolution's (a 16:9 picture in a 21:9 fullscreen
 # window): fit, the default, keeps the shape, with black bars at the sides or above and below, so a 16:9 game in a wider
 # window is no longer stretched as it used to be; stretch fills the window. Changes while the game runs take effect at

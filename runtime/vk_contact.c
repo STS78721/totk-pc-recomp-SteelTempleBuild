@@ -37,13 +37,17 @@ static struct {
 
 int vk_contact_strength(void) {
     int s = cfg_int("TOTK_CONTACT_SHADOWS");
-    if (!s) {
-        const char *ao = cfg_value("TOTK_AO_MODE");
-        if (!strcmp(ao, "hbao")) s = 100;
-        else if (!strcmp(ao, "ssao")) s = 50;
-    }
+    const char *ao = cfg_value("TOTK_AO_MODE");
+    if (!strcmp(ao, "xegtao")) s = s ? s : 100;
+    else if (!strcmp(ao, "hbao")) s = s ? s : 100;
+    else if (!strcmp(ao, "ssao")) s = s ? s : 50;
+    else if (!strcmp(ao, "off")) s = 0;
+
+    const char *rt = cfg_value("TOTK_RTGI");
+    int rt_active = (rt && strcmp(rt, "off"));
+    if (rt_active && s == 0) s = 1;
     C.strength = s < 0 ? 0 : s > 100 ? 100 : s;
-    return C.strength;
+    return C.strength || rt_active;
 }
 
 static int init(VkCtx *c) {
@@ -127,15 +131,31 @@ void vk_contact_flush(VkExec *ex) {
     VkImageView out = vk_exec_target_view(C.scene, VK_FORMAT_B10G11R11_UFLOAT_PACK32, VK_IMAGE_VIEW_TYPE_2D,
                                           VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1, 0);
     if (!in || !out) return;
+    const char *ao = cfg_value("TOTK_AO_MODE");
+    float ao_mode_val = 0.0f;
+    if (!strcmp(ao, "xegtao")) ao_mode_val = 3.0f;
+    else if (!strcmp(ao, "hbao")) ao_mode_val = 2.0f;
+    else if (!strcmp(ao, "ssao")) ao_mode_val = 1.0f;
+
+    const char *rt = cfg_value("TOTK_RTGI");
+    float rtgi_tier = 0.0f;
+    if (!strcmp(rt, "low")) rtgi_tier = 1.0f;
+    else if (!strcmp(rt, "medium")) rtgi_tier = 2.0f;
+    else if (!strcmp(rt, "high")) rtgi_tier = 3.0f;
+    else if (!strcmp(rt, "ultra")) rtgi_tier = 4.0f;
+
+    int bounce_pct = cfg_int("TOTK_RTGI_BOUNCE");
+    float rtgi_bounce = (bounce_pct > 0) ? ((float)bounce_pct / 100.0f) : 1.0f;
+
     VkCommandBuffer cb = ex->cb;
     float pcv[16] = {px, py, zfar, (float)C.strength / 100.0f,
                      lx / ll, ly / ll, lz / ll, 0.6f,
                      (float)C.w, (float)C.h, 1.0f / (float)C.w, 1.0f / (float)C.h,
-                     (float)C.debug, 0, 0, 0};
+                     (float)C.debug, ao_mode_val, rtgi_tier, rtgi_bounce};
     if (!C.logged) {
         C.logged = 1;
-        rt_log("vk: contact shadows on a %ux%u scene, sun toward %.3f %.3f %.3f (view space), far %g", C.w, C.h,
-               pcv[4], pcv[5], pcv[6], zfar);
+        rt_log("vk: AO & RTGI on %ux%u scene (AO: %s, RTGI: %s, bounce: %.0f%%), far %g", C.w, C.h,
+               ao, rt, rtgi_bounce * 100.0f, zfar);
     }
     mem_barrier(cb);   // the compose passes' writes, before the march reads and writes them
     VkDescriptorImageInfo ii = {C.sampler, in, VK_IMAGE_LAYOUT_GENERAL}, oi = {VK_NULL_HANDLE, out, VK_IMAGE_LAYOUT_GENERAL};
