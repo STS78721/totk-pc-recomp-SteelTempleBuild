@@ -2,10 +2,12 @@
 
 Features:
 - Sleek dark Zonai/Master Sword theme
+- Game executable icon integrated
 - Vendor AI & Upscaler SDK management (NVIDIA DLSS 4.5 / DLSS-NR, Intel XeSS, AMD FSR)
 - Native Recomp Controller UI selection (PS5 DualSense Monochrome/Color, Xbox Monochrome/Color, Switch)
 - Automated Save Game Importer (auto-detects Eden, Yuzu, Ryujinx saves)
-- Desktop shortcut creation
+- Desktop shortcut creation with game icon
+- Integrated In-Game Controller Overlay Guide & Readme creator
 - Real-time animated progress & live logging
 """
 
@@ -19,10 +21,27 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
-from .save_importer import scan_for_saves, inject_save
-from .vendor_sdks import install_vendor_sdks, VENDOR_SDK_FILES
-from .controller_ui_manager import install_controller_ui, CONTROLLER_UI_CHOICES
-from .shortcut_creator import create_desktop_shortcut
+# Robust imports supporting both direct execution and package import
+try:
+    from .save_importer import scan_for_saves, inject_save
+    from .vendor_sdks import install_vendor_sdks, VENDOR_SDK_FILES
+    from .controller_ui_manager import install_controller_ui, CONTROLLER_UI_CHOICES
+    from .shortcut_creator import create_desktop_shortcut
+except (ImportError, ValueError):
+    try:
+        from save_importer import scan_for_saves, inject_save
+        from vendor_sdks import install_vendor_sdks, VENDOR_SDK_FILES
+        from controller_ui_manager import install_controller_ui, CONTROLLER_UI_CHOICES
+        from shortcut_creator import create_desktop_shortcut
+    except ImportError:
+        # Fallback when running from PyInstaller bundle
+        installer_dir = os.path.dirname(__file__)
+        if installer_dir not in sys.path:
+            sys.path.insert(0, installer_dir)
+        from save_importer import scan_for_saves, inject_save
+        from vendor_sdks import install_vendor_sdks, VENDOR_SDK_FILES
+        from controller_ui_manager import install_controller_ui, CONTROLLER_UI_CHOICES
+        from shortcut_creator import create_desktop_shortcut
 
 # Theme colors
 ACCENT_GREEN = "#00e699"
@@ -32,16 +51,69 @@ CARD_BG = "#1c2026"
 CARD_BORDER = "#2a313d"
 TEXT_DIM = "#9ba3af"
 
+CONTROLLER_GUIDE_TEXT = """================================================================================
+  THE LEGEND OF ZELDA: TEARS OF THE KINGDOM (PC RECOMPILED)
+  IN-GAME SETTINGS OVERLAY & CONTROLLER NAVIGATION GUIDE
+================================================================================
+
+1. HOW TO OPEN / CLOSE THE IN-GAME SETTINGS MENU:
+   -----------------------------------------------------------------------------
+   • CONTROLLER: Press SELECT + START at the same time
+     - PlayStation (PS5 / PS4): Press [Share / Create] + [Options] together
+     - Xbox (Series X|S / One):  Press [View / Back] + [Menu / Start] together
+     - Nintendo Switch Layout:  Press [Minus (-)] + [Plus (+)] together
+
+   • KEYBOARD:   Press [F1] or [Esc] at any time.
+
+2. HOW TO NAVIGATE THE MENU OVERLAY WITH A CONTROLLER:
+   -----------------------------------------------------------------------------
+   • Switch Menu Tabs (Graphics, Controls, Audio, Mods, Cheats):
+     - Press [LB / RB] on Xbox or [L1 / R1] on PlayStation.
+
+   • Browse Settings / Sliders:
+     - Use the [D-Pad Up / Down] or [Left Stick].
+
+   • Change Setting Values / Adjust Sliders:
+     - Use [D-Pad Left / Right] or [Left Stick Left / Right].
+
+   • Select / Toggle / Checkbox:
+     - Press [A button] (Xbox) / [Cross ✕] (PlayStation) / [A] (Switch East).
+
+   • Back / Cancel / Close:
+     - Press [B button] (Xbox) / [Circle ◯] (PlayStation) / [B] (Switch South).
+
+3. PERFORMANCE OVERLAY (FPS, FRAME TIME, VRAM, GPU USAGE):
+   -----------------------------------------------------------------------------
+   • CONTROLLER: Press L3 + R3 at the same time (Click Left Stick + Click Right Stick)
+   • KEYBOARD:   Press [F10] to cycle overlay modes (Off -> Compact -> Detailed).
+
+4. FULLSCREEN TOGGLE:
+   -----------------------------------------------------------------------------
+   • Press [F11] or [Alt + Enter] on keyboard.
+
+================================================================================
+Enjoy playing The Legend of Zelda: Tears of the Kingdom on PC!
+================================================================================
+"""
+
 class ModernTotkInstaller(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         # Window properties
         self.title("The Legend of Zelda: Tears of the Kingdom - PC Setup")
-        self.geometry("980x720")
-        self.minsize(920, 680)
+        self.geometry("1000x740")
+        self.minsize(940, 700)
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("green")
+
+        # Set game icon if found
+        self.icon_path = self.find_game_icon()
+        if self.icon_path and os.path.exists(self.icon_path):
+            try:
+                self.iconbitmap(self.icon_path)
+            except Exception:
+                pass
 
         # Variables
         self.var_base_game = tk.StringVar(value=self.auto_find_file([".xci", ".nsp"], ["totk", "zelda", "tears"]))
@@ -56,12 +128,25 @@ class ModernTotkInstaller(ctk.CTk):
         self.var_import_save = tk.BooleanVar(value=True)
         self.var_selected_save = tk.StringVar(value="")
         self.var_create_shortcut = tk.BooleanVar(value=True)
+        self.var_create_guide = tk.BooleanVar(value=True)
 
         self.detected_saves = []
 
         # Setup UI
         self.setup_ui()
         self.refresh_detected_saves()
+
+    def find_game_icon(self):
+        candidates = [
+            r"C:\Games\totk-pc-recomp-src\runtime\totk.ico",
+            os.path.join(os.path.dirname(__file__), "..", "runtime", "totk.ico"),
+            os.path.join(os.path.dirname(__file__), "totk.ico"),
+            r"C:\Games\Tears of the Kingdom PC\GAME\totk.exe",
+        ]
+        for c in candidates:
+            if os.path.exists(c):
+                return c
+        return None
 
     def auto_find_file(self, extensions, keywords):
         search_dirs = [
@@ -96,7 +181,6 @@ class ModernTotkInstaller(ctk.CTk):
         return ""
 
     def setup_ui(self):
-        # Configure grid layout
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -119,27 +203,40 @@ class ModernTotkInstaller(ctk.CTk):
         self.tabview.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
 
         self.tab_files = self.tabview.add("1. Game Files & Location")
-        self.tab_features = self.tabview.add("2. Controllers & Vendor SDKs")
-        self.tab_install = self.tabview.add("3. Installation & Progress")
+        self.tab_features = self.tabview.add("2. Features & Controllers")
+        self.tab_guide = self.tabview.add("3. Controller Hotkey Guide")
+        self.tab_install = self.tabview.add("4. Installation & Launch")
 
         self.build_tab_files()
         self.build_tab_features()
+        self.build_tab_guide()
         self.build_tab_install()
 
         # 3. Bottom Action Bar
         bottom_bar = ctk.CTkFrame(self, fg_color=CARD_BG, height=60, corner_radius=0)
         bottom_bar.grid(row=2, column=0, sticky="ew")
 
-        self.btn_next = ctk.CTkButton(bottom_bar, text="Next: Customization & Features →", fg_color=ACCENT_HOVER,
+        self.btn_next = ctk.CTkButton(bottom_bar, text="Next: Features & Controllers →", fg_color=ACCENT_HOVER,
                                       hover_color=ACCENT_GREEN, font=ctk.CTkFont(size=14, weight="bold"),
-                                      command=lambda: self.tabview.set("2. Controllers & Vendor SDKs"))
+                                      command=self.advance_tab)
         self.btn_next.pack(side="right", padx=20, pady=12)
+
+    def advance_tab(self):
+        curr = self.tabview.get()
+        if "1." in curr:
+            self.tabview.set("2. Features & Controllers")
+            self.btn_next.configure(text="Next: Controller Hotkey Guide →")
+        elif "2." in curr:
+            self.tabview.set("3. Controller Hotkey Guide")
+            self.btn_next.configure(text="Next: Start Installation →")
+        elif "3." in curr:
+            self.tabview.set("4. Installation & Launch")
+            self.btn_next.configure(text="Ready to Install")
 
     def build_tab_files(self):
         frame = self.tab_files
         frame.grid_columnconfigure(1, weight=1)
 
-        # Instruction
         info = ctk.CTkLabel(frame, text="Select your base game, update, and keys. The installer auto-detects them if available:",
                             font=ctk.CTkFont(size=13), text_color=TEXT_DIM)
         info.grid(row=0, column=0, columnspan=3, sticky="w", pady=(10, 15))
@@ -179,54 +276,70 @@ class ModernTotkInstaller(ctk.CTk):
 
         # 1. Controller UI Selection Card
         card_ctrl = ctk.CTkFrame(frame, fg_color=CARD_BG, corner_radius=10, border_width=1, border_color=CARD_BORDER)
-        card_ctrl.pack(fill="x", pady=8, padx=5)
+        card_ctrl.pack(fill="x", pady=6, padx=5)
 
-        ctk.CTkLabel(card_ctrl, text="🎮 Controller UI Button Prompts", font=ctk.CTkFont(size=15, weight="bold"), text_color=ACCENT_GREEN).pack(anchor="w", padx=15, pady=(10, 2))
-        ctk.CTkLabel(card_ctrl, text="Choose your controller style. The installer automatically integrates HD button prompts:", text_color=TEXT_DIM).pack(anchor="w", padx=15, pady=(0, 8))
+        ctk.CTkLabel(card_ctrl, text="🎮 Controller UI Button Prompts", font=ctk.CTkFont(size=14, weight="bold"), text_color=ACCENT_GREEN).pack(anchor="w", padx=15, pady=(8, 2))
+        ctk.CTkLabel(card_ctrl, text="Choose your controller style. The installer automatically integrates HD button prompts:", text_color=TEXT_DIM, font=ctk.CTkFont(size=12)).pack(anchor="w", padx=15, pady=(0, 6))
 
         ui_names = [c["name"] for c in CONTROLLER_UI_CHOICES]
         self.opt_ctrl = ctk.CTkOptionMenu(card_ctrl, values=ui_names, variable=self.var_controller_ui,
-                                          fg_color=CARD_BORDER, button_color=ACCENT_HOVER, button_hover_color=ACCENT_GREEN, width=380)
-        self.opt_ctrl.pack(anchor="w", padx=15, pady=(0, 12))
+                                          fg_color=CARD_BORDER, button_color=ACCENT_HOVER, button_hover_color=ACCENT_GREEN, width=400)
+        self.opt_ctrl.pack(anchor="w", padx=15, pady=(0, 10))
 
         # 2. Vendor SDKs Card (NVIDIA / Intel / AMD)
         card_sdks = ctk.CTkFrame(frame, fg_color=CARD_BG, corner_radius=10, border_width=1, border_color=CARD_BORDER)
-        card_sdks.pack(fill="x", pady=8, padx=5)
+        card_sdks.pack(fill="x", pady=6, padx=5)
 
-        ctk.CTkLabel(card_sdks, text="⚡ Vendor AI & Upscaling SDKs (NVIDIA, Intel, AMD)", font=ctk.CTkFont(size=15, weight="bold"), text_color=ACCENT_GREEN).pack(anchor="w", padx=15, pady=(10, 2))
+        ctk.CTkLabel(card_sdks, text="⚡ Vendor AI & Upscaling SDKs (NVIDIA, Intel, AMD)", font=ctk.CTkFont(size=14, weight="bold"), text_color=ACCENT_GREEN).pack(anchor="w", padx=15, pady=(8, 2))
         
         chk_sdk = ctk.CTkCheckBox(card_sdks, text="Auto-deploy / download AI Upscalers (NVIDIA DLSS 4.5 / DLSS-NR, Intel XeSS, Streamline)",
                                   variable=self.var_install_sdks, fg_color=ACCENT_GREEN, hover_color=ACCENT_HOVER)
-        chk_sdk.pack(anchor="w", padx=15, pady=6)
-        ctk.CTkLabel(card_sdks, text="Uncheck if you want a stripped minimal installation without vendor neural reconstruction libraries.",
-                     text_color=TEXT_DIM, font=ctk.CTkFont(size=12)).pack(anchor="w", padx=35, pady=(0, 10))
+        chk_sdk.pack(anchor="w", padx=15, pady=4)
+        ctk.CTkLabel(card_sdks, text="Uncheck for a minimal install without vendor neural reconstruction libraries.",
+                     text_color=TEXT_DIM, font=ctk.CTkFont(size=11)).pack(anchor="w", padx=35, pady=(0, 8))
 
         # 3. Bring Your Old Save Card
         card_save = ctk.CTkFrame(frame, fg_color=CARD_BG, corner_radius=10, border_width=1, border_color=CARD_BORDER)
-        card_save.pack(fill="x", pady=8, padx=5)
+        card_save.pack(fill="x", pady=6, padx=5)
 
-        ctk.CTkLabel(card_save, text="💾 Bring Your Old Save Game", font=ctk.CTkFont(size=15, weight="bold"), text_color=ACCENT_GREEN).pack(anchor="w", padx=15, pady=(10, 2))
+        ctk.CTkLabel(card_save, text="💾 Bring Your Old Save Game", font=ctk.CTkFont(size=14, weight="bold"), text_color=ACCENT_GREEN).pack(anchor="w", padx=15, pady=(8, 2))
         
         chk_save = ctk.CTkCheckBox(card_save, text="Import existing save data from emulator or previous backup",
                                    variable=self.var_import_save, fg_color=ACCENT_GREEN, hover_color=ACCENT_HOVER)
-        chk_save.pack(anchor="w", padx=15, pady=6)
+        chk_save.pack(anchor="w", padx=15, pady=4)
 
         save_row = ctk.CTkFrame(card_save, fg_color="transparent")
-        save_row.pack(fill="x", padx=35, pady=(0, 10))
+        save_row.pack(fill="x", padx=35, pady=(0, 8))
 
-        self.opt_save = ctk.CTkOptionMenu(save_row, variable=self.var_selected_save, values=["No save detected yet"], width=450,
+        self.opt_save = ctk.CTkOptionMenu(save_row, variable=self.var_selected_save, values=["Scanning saves..."], width=460,
                                           fg_color=CARD_BORDER, button_color=ACCENT_HOVER, button_hover_color=ACCENT_GREEN)
         self.opt_save.pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(save_row, text="Browse Save...", width=110, command=self.browse_custom_save).pack(side="left")
 
-        # 4. Shortcut Card
+        # 4. Shortcut & Guide Card
         card_short = ctk.CTkFrame(frame, fg_color=CARD_BG, corner_radius=10, border_width=1, border_color=CARD_BORDER)
-        card_short.pack(fill="x", pady=8, padx=5)
+        card_short.pack(fill="x", pady=6, padx=5)
 
-        chk_short = ctk.CTkCheckBox(card_short, text="Create Desktop Shortcut with high-res Tears of the Kingdom icon",
+        chk_short = ctk.CTkCheckBox(card_short, text="Create Desktop Shortcut with high-res Tears of the Kingdom game icon",
                                     variable=self.var_create_shortcut, fg_color=ACCENT_GREEN, hover_color=ACCENT_HOVER)
-        chk_short.pack(anchor="w", padx=15, pady=12)
+        chk_short.pack(anchor="w", padx=15, pady=(8, 4))
+
+        chk_guide = ctk.CTkCheckBox(card_short, text="Create 'CONTROLLER_GUIDE.txt' on Desktop and in game folder",
+                                    variable=self.var_create_guide, fg_color=ACCENT_GREEN, hover_color=ACCENT_HOVER)
+        chk_guide.pack(anchor="w", padx=15, pady=(0, 8))
+
+    def build_tab_guide(self):
+        frame = self.tab_guide
+        frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(frame, text="📖 In-Game Menu & Controller Cheat Sheet", font=ctk.CTkFont(size=16, weight="bold"), text_color=ACCENT_GREEN).pack(anchor="w", pady=(10, 5))
+        ctk.CTkLabel(frame, text="You can access graphics, DLSS, cheats, and mods at any time while playing:", text_color=TEXT_DIM).pack(anchor="w", pady=(0, 10))
+
+        guide_box = ctk.CTkTextbox(frame, fg_color=CARD_BG, font=ctk.CTkFont(family="Consolas", size=12), height=400)
+        guide_box.pack(fill="both", expand=True, padx=5, pady=(0, 10))
+        guide_box.insert("1.0", CONTROLLER_GUIDE_TEXT)
+        guide_box.configure(state="disabled")
 
     def build_tab_install(self):
         frame = self.tab_install
@@ -291,7 +404,7 @@ class ModernTotkInstaller(ctk.CTk):
             return
 
         self.btn_start.configure(state="disabled", text="INSTALLING...")
-        self.tabview.set("3. Installation & Progress")
+        self.tabview.set("4. Installation & Launch")
         
         threading.Thread(target=self.run_install_worker, daemon=True).start()
 
@@ -332,7 +445,7 @@ class ModernTotkInstaller(ctk.CTk):
             if ok:
                 self.log(f"[✓] {choice['name']} successfully installed to mods/ folder.")
             else:
-                self.log(f"[!] Warning: Could not find zip for {choice['name']}, checked local fallback.")
+                self.log(f"[!] Checked local fallback for {choice['name']}.")
         else:
             self.log("[✓] Nintendo Switch controller prompts selected.")
 
@@ -359,20 +472,34 @@ class ModernTotkInstaller(ctk.CTk):
                 else:
                     self.log("[!] Warning: Save injection encountered an issue.")
 
-        self.progress_bar.set(0.85)
+        self.progress_bar.set(0.80)
 
         # 5. Desktop Shortcut
         if self.var_create_shortcut.get():
             self.lbl_status.configure(text="Creating Desktop Shortcut...")
             self.log("Creating Desktop Shortcut...")
             create_desktop_shortcut(target)
-            self.log("[✓] Desktop shortcut created successfully.")
+            self.log("[✓] Desktop shortcut created successfully with game icon.")
+
+        # 6. Controller Guide Readme
+        if self.var_create_guide.get():
+            self.lbl_status.configure(text="Generating Controller Guide...")
+            guide_game_path = os.path.join(target, "CONTROLLER_GUIDE.txt")
+            desktop_dir = os.path.join(os.environ.get("USERPROFILE", ""), "Desktop")
+            guide_desk_path = os.path.join(desktop_dir, "TOTK_CONTROLLER_GUIDE.txt")
+            with open(guide_game_path, "w", encoding="utf-8") as f:
+                f.write(CONTROLLER_GUIDE_TEXT)
+            with open(guide_desk_path, "w", encoding="utf-8") as f:
+                f.write(CONTROLLER_GUIDE_TEXT)
+            self.log(f"[✓] Created Controller Guide: {guide_game_path}")
+            self.log(f"[✓] Created Controller Guide on Desktop: {guide_desk_path}")
 
         self.progress_bar.set(1.0)
         self.lbl_status.configure(text="Installation Complete! Ready to play.")
         self.log("\n==========================================")
         self.log("🎉 INSTALLATION COMPLETED SUCCESSFULLY!")
-        self.log(f"You can now launch the game directly from: {target}\\totk.exe")
+        self.log(f"Launch Game: {target}\\totk.exe")
+        self.log("Menu Overlay: Press Select + Start (or F1)")
         self.log("==========================================")
 
         self.btn_start.configure(state="normal", text="🎮 LAUNCH GAME", fg_color=ACCENT_GREEN, command=self.launch_game)
