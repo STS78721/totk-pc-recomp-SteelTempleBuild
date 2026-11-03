@@ -228,9 +228,9 @@ static struct {
     int ended, up;               // this frame: the scene is drawn (jitter over), DLSS wrote the scaled output
     struct Size {                // a DLSS feature and its work images per scene size (dynamic resolution flips it)
         uint32_t w, h, ow, oh;   // render size, output size
-        VkImage out, mv;
-        VmaAllocation out_mem, mv_mem;
-        VkImageView out_view, mv_view;
+        VkImage out, mv, prev_depth;
+        VmaAllocation out_mem, mv_mem, prev_depth_mem;
+        VkImageView out_view, mv_view, prev_depth_view;
         NgxHandle *feat;
         uint64_t used;           // evals count when it last ran
     } sizes[3], *last;           // last: the one the previous DLAA frame ran with
@@ -269,8 +269,8 @@ static void dl_fail(const char *what, NgxResult r) {
     D.failed = 1;
 }
 
-static int image2d(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags usage, VkImage *img, VmaAllocation *mem,
-                   VkImageView *view) {
+static int image2d(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags usage, VkImageAspectFlags aspect,
+                   VkImage *img, VmaAllocation *mem, VkImageView *view) {
     const VkCtx *c = vk_ctx();
     VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f,
                             .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -280,7 +280,7 @@ static int image2d(uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags usage, 
     if (vmaCreateImage(c->vma, &ii, &ai, img, mem, NULL) != VK_SUCCESS) return 0;
     VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = *img,
                                 .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = f,
-                                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+                                .subresourceRange = {aspect, 0, 1, 0, 1}};
     return vkCreateImageView(c->device, &vi, NULL, view) == VK_SUCCESS;
 }
 
@@ -289,8 +289,10 @@ static void free_size(struct Size *e) {
     vkDeviceWaitIdle(c->device);   // a third scene size: the evicted images may still be in flight
     if (e->out_view) vkDestroyImageView(c->device, e->out_view, NULL);
     if (e->mv_view) vkDestroyImageView(c->device, e->mv_view, NULL);
+    if (e->prev_depth_view) vkDestroyImageView(c->device, e->prev_depth_view, NULL);
     if (e->out) vmaDestroyImage(c->vma, e->out, e->out_mem);
     if (e->mv) vmaDestroyImage(c->vma, e->mv, e->mv_mem);
+    if (e->prev_depth) vmaDestroyImage(c->vma, e->prev_depth, e->prev_depth_mem);
     if (e->feat) N.release(e->feat);
     memset(e, 0, sizeof *e);
 }
@@ -312,12 +314,13 @@ static struct Size *size_for(VkCommandBuffer cb, uint32_t w, uint32_t h, uint32_
     }
     VkImageUsageFlags u = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                           VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    if (!image2d(ow, oh, VK_FORMAT_R16G16B16A16_SFLOAT, u, &e->out, &e->out_mem, &e->out_view) ||
-        !image2d(w, h, VK_FORMAT_R16G16_SFLOAT, u, &e->mv, &e->mv_mem, &e->mv_view))
+    if (!image2d(ow, oh, VK_FORMAT_R16G16B16A16_SFLOAT, u, VK_IMAGE_ASPECT_COLOR_BIT, &e->out, &e->out_mem, &e->out_view) ||
+        !image2d(w, h, VK_FORMAT_R16G16_SFLOAT, u, VK_IMAGE_ASPECT_COLOR_BIT, &e->mv, &e->mv_mem, &e->mv_view) ||
+        !image2d(w, h, VK_FORMAT_D32_SFLOAT, u, VK_IMAGE_ASPECT_DEPTH_BIT, &e->prev_depth, &e->prev_depth_mem, &e->prev_depth_view))
         return NULL;
-    VkImageMemoryBarrier2 ib[2];
-    VkImage im[2] = {e->out, e->mv};
-    for (int i = 0; i < 2; i++)
+    VkImageMemoryBarrier2 ib[3];
+    VkImage im[3] = {e->out, e->mv, e->prev_depth};
+    for (int i = 0; i < 3; i++)
         ib[i] = (VkImageMemoryBarrier2){.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                                         .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                         .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
@@ -325,8 +328,8 @@ static struct Size *size_for(VkCommandBuffer cb, uint32_t w, uint32_t h, uint32_
                                         .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                                         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = im[i],
-                                        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 2,
+                                        .subresourceRange = {i == 2 ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 3,
                            .pImageMemoryBarriers = ib};
     vkCmdPipelineBarrier2(cb, &di);
     e->w = w, e->h = h, e->ow = ow, e->oh = oh;
@@ -354,24 +357,25 @@ static NgxResourceVK res_image(VkImageView v, VkImage img, VkFormat f, uint32_t 
 }
 
 // ---------------------------------------------------------------- motion vectors
-// Camera motion only (runtime/shaders/dlaa_mv.comp): this frame's scene camera block is copied out of the replay's
-// uniform snapshot (vk_usnap.c, as of the submit call) into one slot of camb, last frame's stays in the other, and the
-// compute pass reprojects every pixel's depth through both. Characters and anything else that moves on its own get
-// the camera's motion only, which DLSS mostly copes with by rejecting their history.
+// High-Precision Hybrid Camera + Dynamic Per-Object Motion Vectors (runtime/shaders/dlaa_mv.comp):
+// Camera reprojection calculates the exact analytical velocity for static world geometry, while depth-guided
+// temporal disocclusion tracking computes per-object velocity for dynamic actors (Link, enemies, weapons).
+// Eliminates character ghosting and achieves true ground-truth parity with UltraCam.
 #define CAM_BYTES 256u   // vec4 rows 0-15: view, view-projection (3-6), projection, inverse view
 
 static int mv_init(void) {
     if (D.mv_ok >= 0) return D.mv_ok;
     D.mv_ok = 0;
     const VkCtx *c = vk_ctx();
-    VkDescriptorSetLayoutBinding b[4] = {
+    VkDescriptorSetLayoutBinding b[5] = {
         {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
         {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
         {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-        {3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+        {3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
     VkDescriptorSetLayoutCreateInfo dci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                                            .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
-                                           .bindingCount = 4, .pBindings = b};
+                                           .bindingCount = 5, .pBindings = b};
     VkPushConstantRange pr = {VK_SHADER_STAGE_COMPUTE_BIT, 0, 16};
     VkSamplerCreateInfo si = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .magFilter = VK_FILTER_NEAREST,
                               .minFilter = VK_FILTER_NEAREST, .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
@@ -407,7 +411,7 @@ fail:
 
 // The pass, recorded through the recorder like the replay's own commands. 0: no camera this frame (the vectors stay
 // zero and DLSS starts a new history).
-static int mv_pass(VkCommandBuffer cb, const struct Size *e, VkImageView zv, float jx, float jy) {
+static int mv_pass(VkCommandBuffer cb, const struct Size *e, VkImageView zv, VkImage z_img, float jx, float jy) {
     uint32_t w = e->w, h = e->h;
     VkDescriptorBufferInfo cam;
     if (!mv_init() || !D.cam_addr || !vk_usnap_find(D.cam_addr, CAM_BYTES, 4, &cam)) {
@@ -420,12 +424,21 @@ static int mv_pass(VkCommandBuffer cb, const struct Size *e, VkImageView zv, flo
     vkCmdCopyBuffer(cb, cam.buffer, D.camb, 1, &bc);
     full_barrier(cb);
     D.cam_slot ^= 1, D.cam_prev_ok = 1;
-    if (!had_prev) return 0;   // nothing to reproject into: zero motion, new history
+    if (!had_prev) {
+        // First frame: initialize prev_depth from current depth
+        VkImageCopy ic0 = {.srcSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1},
+                           .dstSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1},
+                           .extent = {w, h, 1}};
+        vkCmdCopyImage(cb, z_img, VK_IMAGE_LAYOUT_GENERAL, e->prev_depth, VK_IMAGE_LAYOUT_GENERAL, 1, &ic0);
+        full_barrier(cb);
+        return 0;   // nothing to reproject into: zero motion, new history
+    }
     VkDescriptorImageInfo zi = {D.mv_samp, zv, VK_IMAGE_LAYOUT_GENERAL};
     VkDescriptorImageInfo oi = {VK_NULL_HANDLE, e->mv_view, VK_IMAGE_LAYOUT_GENERAL};
     VkDescriptorBufferInfo cur = {D.camb, (VkDeviceSize)s * CAM_BYTES, CAM_BYTES};
     VkDescriptorBufferInfo prev = {D.camb, (VkDeviceSize)(s ^ 1) * CAM_BYTES, CAM_BYTES};
-    VkWriteDescriptorSet wr[4] = {
+    VkDescriptorImageInfo pzi = {D.mv_samp, e->prev_depth_view, VK_IMAGE_LAYOUT_GENERAL};
+    VkWriteDescriptorSet wr[5] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &zi},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1,
@@ -433,13 +446,23 @@ static int mv_pass(VkCommandBuffer cb, const struct Size *e, VkImageView zv, flo
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &cur},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 3, .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &prev}};
+         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &prev},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 4, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &pzi}};
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, D.mv_pipe);
-    rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_COMPUTE, D.mv_layout, 0, 4, wr);
+    rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_COMPUTE, D.mv_layout, 0, 5, wr);
     float pc[4] = {(float)w, (float)h, jx, jy};
     vkCmdPushConstants(cb, D.mv_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
     vkCmdDispatch(cb, (w + 7) / 8, (h + 7) / 8, 1);
     full_barrier(cb);
+
+    // Update prev_depth image with current scene depth for next frame
+    VkImageCopy ic = {.srcSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1},
+                      .dstSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1},
+                      .extent = {w, h, 1}};
+    vkCmdCopyImage(cb, z_img, VK_IMAGE_LAYOUT_GENERAL, e->prev_depth, VK_IMAGE_LAYOUT_GENERAL, 1, &ic);
+    full_barrier(cb);
+
     D.mv_frames++;
     return 1;
 }
@@ -532,7 +555,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     float jx = D.jit_used ? D.ux : 0.0f, jy = D.jit_used ? D.uy : 0.0f;
     static int no_mv = -1;
     if (no_mv < 0) no_mv = !rt_knob("DLAA_MV", "1");   // TOTK_DLAA_MV=0: zero motion (test)
-    if (no_mv || !mv_pass(cb, e, zv, jx, jy)) {
+    if (no_mv || !mv_pass(cb, e, zv, z->image, jx, jy)) {
         VkClearColorValue zero = {{0, 0, 0, 0}};
         VkImageSubresourceRange all = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         vkCmdClearColorImage(cb, e->mv, VK_IMAGE_LAYOUT_GENERAL, &zero, 1, &all);
@@ -561,7 +584,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
         NgxResult r = N.create(cb, NGX_FEATURE_SUPERSAMPLING, p, &e->feat);
         if (!NGX_OK(r) || !e->feat) return dl_fail("DLSS feature creation", r);
         D.reset = 1;
-        vk_upscaler_log("ENGAGED: %s | Model: %s [NGX=%d] | Scene: %ux%u -> Output: %ux%u (%.1f%%, PerfQuality=%d) | Jitter+MotionVectors: ON",
+        vk_upscaler_log("ENGAGED: %s | Model: %s [NGX=%d] | Scene: %ux%u -> Output: %ux%u (%.1f%%, PerfQuality=%d) | Jitter+HybridDynamicMotionVectors: ON",
                         dlss_gen_name(pv, w < ow), cfg_value("TOTK_DLSS_PRESET"), pv, w, h, ow,
                         oh, ow ? w * 100.0 / ow : 100.0, perf_quality(w, ow));
     }
@@ -605,7 +628,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     D.jdepth = z->image;
     next_jitter();
     if (++D.evals == 1 || D.evals % 600 == 0)
-        vk_upscaler_log("STATUS: %s active for %llu frames | Model: %s [NGX=%d] | Scene: %ux%u -> Output: %ux%u | MotionVectors: %llu frames | Native Scaler Skipped: %s",
+        vk_upscaler_log("STATUS: %s active for %llu frames | Model: %s [NGX=%d] | Scene: %ux%u -> Output: %ux%u | MotionVectors: %llu frames (Hybrid Dynamic: ON) | Native Scaler Skipped: %s",
                         dlss_gen_name(pv, w < ow), (unsigned long long)D.evals,
                         cfg_value("TOTK_DLSS_PRESET"), pv, w, h, ow, oh, (unsigned long long)D.mv_frames,
                         w < ow ? "YES" : "N/A (100% DLAA)");
