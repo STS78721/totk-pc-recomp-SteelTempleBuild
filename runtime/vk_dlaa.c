@@ -714,27 +714,55 @@ void vk_dlaa_pass(VkExec *ex) {
     const VkExecTarget *c = &ex->color[0], *z = &ex->depth;
     int dl = dl_active(), fsr = !dl && fsr_scene_active();
     if ((!dl && !fsr) || D.done) return;
-    // The G-buffer: several colour targets with a D32F depth of at least 640 wide. Only the light target drawn after it
+
+    unsigned o[2], s[2];
+    res_sizes(o, s);
+    uint32_t min_scene_w = s[0] ? (s[0] * 7 / 8) : 640;
+    uint32_t out_w = o[0] ? (o[0] * 7 / 8) : min_scene_w;
+
+    // The G-buffer: several colour targets with a D32F depth of at least the scene width. Only the light target drawn after it
     // arms the frame; at night the game draws into the light target alone with the scene depth before the G-buffer too,
     // and DLAA then ran at a small pass ahead of the whole scene, which reached the screen jittered.
-    if (ex->pass_ncolor >= 3 && z->image && z->format == VK_FORMAT_D32_SFLOAT && z->width >= 640) {
+    // Must be at least the configured scene size to avoid mistakenly locking onto cave fog / volumetric sub-passes.
+    if (ex->pass_ncolor >= 3 && z->image && z->format == VK_FORMAT_D32_SFLOAT && z->width >= min_scene_w) {
         D.gbuf = 1, D.armed = 0;
         return;
     }
     // the scene depth is D32F; a D16 target of the scene size also serves one composite pass before the transparents
     if (D.gbuf && ex->pass_ncolor == 1 && c->image && scene_color(c->format) && z->image && z->format == VK_FORMAT_D32_SFLOAT &&
-        c->width == z->width && c->height == z->height && c->width >= 640 &&
+        c->width == z->width && c->height == z->height && c->width >= min_scene_w &&
         c->samples <= 1 && !c->is3d) {
         D.color = *c, D.depth = *z, D.armed = 1;
         return;
     }
     if (!D.armed) return;
+
+    // the game's scaling pass: one colour target matching the output resolution, no depth.
+    // Must target output resolution so intermediate internal upsamples (e.g. cave fog / light volume) are never mistaken for the final pass.
+    if (ex->pass_ncolor == 1 && c->image && !z->image && scene_color(c->format) &&
+        c->width >= out_w && c->width > D.color.width &&
+        c->samples <= 1 && !c->is3d) {
+        if (dl) {
+            D.done = D.up = D.ended = 1;
+            evaluate(ex, c);
+        } else if (fsr) {
+            vk_exec_barrier(ex);
+            VkImageView cv = vk_exec_target_view(D.color.img, D.color.format, VK_IMAGE_VIEW_TYPE_2D,
+                                                 VK_IMAGE_ASPECT_COLOR_BIT, D.color.level, D.color.base_layer, 1, 0);
+            if (vk_fsr_scene(ex->cb, cv, D.color.image, D.color.width, D.color.height, c->image, c->level,
+                             c->base_layer, c->width, c->height)) {
+                D.done = D.up = D.ended = 1;
+                ex->recorded += 4;
+                vk_exec_draw_new_cb();
+            }
+        }
+        return;
+    }
+
     if (!D.ended) {
         if (!ex->pass_w || ex->pass_w * 4 > D.color.width) return;
         D.ended = 1;
-        unsigned o[2], s[2];
-        res_sizes(o, s);
-        if (D.color.width >= o[0]) {
+        if (D.color.width >= out_w) {
             if (dl) D.done = 1, evaluate(ex, NULL);   // DLAA in place; else wait for the scaling pass
             else if (fsr && !strcmp(cfg_value("TOTK_UPSCALER"), "fsr4")) {
                 vk_exec_barrier(ex);
@@ -750,19 +778,20 @@ void vk_dlaa_pass(VkExec *ex) {
         }
         return;
     }
-    // the game's scaling pass: one colour target wider than the scene, no depth
-    if (ex->pass_ncolor == 1 && c->image && !z->image && scene_color(c->format) && c->width > D.color.width &&
+
+    // Fallback for DLAA in place if bloom chain was skipped in low-light environments (e.g. dark caves)
+    if (D.color.width >= out_w && ex->pass_ncolor == 1 && c->image && !z->image && scene_color(c->format) &&
         c->samples <= 1 && !c->is3d) {
         if (dl) {
-            D.done = D.up = 1;
-            evaluate(ex, c);
-        } else if (fsr) {
+            D.done = 1;
+            evaluate(ex, NULL);
+        } else if (fsr && !strcmp(cfg_value("TOTK_UPSCALER"), "fsr4")) {
             vk_exec_barrier(ex);
             VkImageView cv = vk_exec_target_view(D.color.img, D.color.format, VK_IMAGE_VIEW_TYPE_2D,
                                                  VK_IMAGE_ASPECT_COLOR_BIT, D.color.level, D.color.base_layer, 1, 0);
-            if (vk_fsr_scene(ex->cb, cv, D.color.image, D.color.width, D.color.height, c->image, c->level,
-                             c->base_layer, c->width, c->height)) {
-                D.done = D.up = 1;
+            if (vk_fsr_scene(ex->cb, cv, D.color.image, D.color.width, D.color.height, D.color.image, D.color.level,
+                             D.color.base_layer, D.color.width, D.color.height)) {
+                D.done = 1;
                 ex->recorded += 4;
                 vk_exec_draw_new_cb();
             }
