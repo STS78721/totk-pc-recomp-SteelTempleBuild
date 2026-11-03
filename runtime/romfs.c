@@ -350,6 +350,7 @@ static int other_version(const char *path) {
 }
 
 // ---- the resource size table's inputs: the tables the overlays carry, before overlay_contest keeps one of them
+static const char *prompts_loaded;
 static char restbl_rel[256];   // the RomFS path of the game's table, "" when it has none
 typedef struct {
     char *file;
@@ -627,7 +628,7 @@ static Restbl *restbl_unpack(const void *z, size_t n) {
 // has, restbl_estimate for an added one). Never lowers the game's entries.
 static void restbl_overlay(void) {
     int player = 0;
-    for (size_t k = 0; k < noverlay; k++) player |= overlays[k].mod || overlays[k].prio == 1;
+    for (size_t k = 0; k < noverlay; k++) player |= overlays[k].mod || overlays[k].prio == 1 || prompts_loaded != NULL;
     if (!player || !restbl_rel[0]) return;
     static const char keeps[] = "mod files that grew may fail to load";
     double t0 = now_s();
@@ -672,7 +673,7 @@ static void restbl_overlay(void) {
     for (size_t k = 0; k < noverlay; k++) {
         Overlay *o = &overlays[k];
         if (o->index == gi) served = o;
-        if ((!o->mod && o->prio != 1) || o->index == gi) continue;
+        if ((!o->mod && o->prio != 1 && !prompts_loaded) || o->index == gi) continue;
         char key[4200];
         restbl_key(o->name, key, sizeof key);
         int mc = ends_with(o->name, ".mc");
@@ -751,7 +752,7 @@ static void camera_overlay(void) {
 // the one the settings asked for at start, the one overlay_init loaded (NULL: the game's own prompts) and why the first
 // did not load (ROMFS_PROMPTS_*). The menu compares them with the settings in effect (ui/menu.cpp prompts_note).
 static struct { const char *name; int ready; } prompts_folders[4];
-static const char *prompts_wanted, *prompts_loaded;
+static const char *prompts_wanted;
 static int prompts_off;
 
 const char *romfs_prompts(void) { return prompts_loaded; }
