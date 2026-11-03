@@ -558,9 +558,14 @@ static bool rows_upscaler(void) {
     const char *xess_title = vk_xess_model_name();
     const char *up_names[] = {dlss_title, "AMD FSR 4.1.2", xess_title, menu_text(UI_MENU_UPSCALER_FSR),
                               menu_text(UI_MENU_UPSCALER_BILINEAR)};
-    if (cfg_bool("TOTK_DLAA") && strcmp(cfg_value("TOTK_UPSCALER"), "dlss")) cfg_set("TOTK_UPSCALER", "dlss");
     if (opt_choice_list("TOTK_UPSCALER", UI_MENU_UPSCALER, up_vals, up_names, 5, UI_MENU_UPSCALER_DESC)) {
-        cfg_set("TOTK_DLAA", !strcmp(cfg_value("TOTK_UPSCALER"), "dlss") ? "1" : "0");
+        const char *u = cfg_value("TOTK_UPSCALER");
+        if (strcmp(u, "dlss") != 0) {
+            cfg_set("TOTK_DLAA", "0");
+        } else {
+            const char *pr = cfg_value("TOTK_UPSCALER_PRESET");
+            cfg_set("TOTK_DLAA", (pr && !strcmp(pr, "native")) ? "1" : "0");
+        }
         cfg_save();
     }
     const char *up = cfg_value("TOTK_UPSCALER");
@@ -591,6 +596,7 @@ static bool rows_upscaler(void) {
             for (const auto &e : p)
                 if (!strcmp(cfg_value("TOTK_UPSCALER_PRESET"), e.name)) {
                     cfg_set("TOTK_DLSS", e.dlss), cfg_set("TOTK_RENDER_SCALE", e.scale);
+                    cfg_set("TOTK_DLAA", !strcmp(e.dlss, "dlaa") ? "1" : "0");
                     cfg_set("TOTK_DLSS_PRESET", e.model);
                     cfg_save();
                 }
@@ -1748,6 +1754,11 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 g_perf_nr_badge[0] = 0;
             }
 
+            // Check real-time resolution: if scene < out it is DLSS (Super Resolution), else DLAA (Native 100%)
+            unsigned out[2], scene[2];
+            res_sizes(out, scene);
+            bool is_upscale = (scene[0] > 0 && out[0] > 0 && scene[0] < out[0]);
+
             // Upscaler identity & presets are preserved regardless of DLSS-NR state
             if (is_dlss || is_dlaa) {
                 g_perf_theme = 0;
@@ -1758,7 +1769,7 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                     if (c >= 'a' && c <= 'z') c -= 32;
                     snprintf(pbuf, sizeof pbuf, "Preset %c", c);
                 } else snprintf(pbuf, sizeof pbuf, "%s", preset && preset[0] ? preset : "Preset M");
-                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s · %s", is_dlaa ? "DLAA 4.5" : "DLSS 4.5", pbuf);
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s · %s", is_upscale ? "DLSS 4.5" : "DLAA 4.5", pbuf);
             } else if (is_xess) {
                 g_perf_theme = 3;
                 const char *xq = cfg_value("TOTK_XESS_QUALITY");
@@ -1785,8 +1796,6 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             }
 
             // Line 2: Upscaler + Resolution scale + Hybrid MV + Reflex/XeLL
-            unsigned out[2], scene[2];
-            res_sizes(out, scene);
             char line2[128];
             snprintf(line2, sizeof line2, "%s", g_perf_upscaler);
 
