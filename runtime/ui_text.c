@@ -29,7 +29,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     SWKBD("Text entry", "Enter a name", "Horse", "OK", "Cancel", "Controller: A = OK, B = Cancel"),
 
     [UI_MENU_TITLE] = "Settings",
-    [UI_MENU_TAB_SCREEN] = "Screen", [UI_MENU_TAB_GAME] = "Game", [UI_MENU_TAB_MODS] = "Mods", [UI_MENU_TAB_SOUND] = "Sound",
+    [UI_MENU_TAB_SCREEN] = "Graphics Settings", [UI_MENU_TAB_DLSS_NR] = "DLSS NR", [UI_MENU_TAB_GAME] = "Game", [UI_MENU_TAB_MODS] = "Mods", [UI_MENU_TAB_SOUND] = "Sound",
     [UI_MENU_TAB_CONTROLS] = "Controls", [UI_MENU_TAB_AMIIBO] = "Amiibo", [UI_MENU_TAB_MENU] = "Menu", [UI_MENU_TAB_ADVANCED] = "Advanced",
     [UI_MENU_CONTINUE] = "Continue", [UI_MENU_QUIT] = "Quit game",
     [UI_MENU_ON] = "On", [UI_MENU_OFF] = "Off", [UI_MENU_AUTO] = "Automatic", [UI_MENU_DEFAULT_MARK] = "default",
@@ -168,6 +168,22 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                               "latency. Automatically guided to On when AMD FSR 3.1 or FSR 4 AI Frame Generation is enabled.",
     [UI_MENU_FXAA] = "Game anti-aliasing (FXAA)",
     [UI_MENU_FXAA_DESC] = "The game's own FXAA edge smoothing. It blurs fine detail a little; with DLAA on it is not needed.",
+    [UI_MENU_DLSS_NR_TITLE] = "NVIDIA DLSS 5 Neural Rendering (Streamline DLSS-NR)",
+    [UI_MENU_DLSS_NR_DESC] = "NVIDIA 3D-guided neural rendering and multi-frame neural reconstruction framework (Streamline 2.14+).",
+    [UI_MENU_DLSS_NR_ENABLE] = "DLSS Neural Rendering",
+    [UI_MENU_DLSS_NR_ENABLE_DESC] = "Engages NVIDIA DLSS-NR neural reconstruction (sl.dlss_nr.dll). Combines scene radiance, surface "
+                                    "motion vectors, and deep neural models to reconstruct photorealistic lighting and edges.",
+    [UI_MENU_DLSS_NR_PRESET] = "Neural Rendering quality",
+    [UI_MENU_DLSS_NR_PRESET_DESC] = "Quality mode for DLSS-NR neural reconstruction: Quality (highest detail), Balanced (balanced "
+                                    "pacing), Performance (high-refresh gaming), Ultra Performance (4K/8K), or DLAA (100% native).",
+    [UI_MENU_DLSS_NR_MODEL] = "Neural model architecture",
+    [UI_MENU_DLSS_NR_MODEL_DESC] = "Underlying neural network model: Transformer Gen 3 (DLSS 5), Transformer Gen 2, or Automatic.",
+    [UI_MENU_DLSS_NR_RAY_CACHE] = "Neural Radiance Caching",
+    [UI_MENU_DLSS_NR_RAY_CACHE_DESC] = "Leverages real-time AI neural radiance caching for ambient stability and clean specular response.",
+    [UI_MENU_DLSS_NR_SHARPNESS] = "Neural detail sharpness",
+    [UI_MENU_DLSS_NR_SHARPNESS_DESC] = "Adjusts neural edge definition and micro-contrast enhancement (0 to 100 %).",
+    [UI_MENU_DLSS_NR_STATUS] = "Streamline DLSS-NR plugin",
+    [UI_MENU_DLSS_NR_STATUS_DESC] = "Status of the Streamline DLSS-NR plugin in the GAME directory.",
 
     [UI_MENU_FPS_LIMIT] = "Frame rate limit",
     [UI_MENU_FPS_LIMIT_DESC] = "The most frames per second the game draws. Above 60 is experimental and needs Game speed "
@@ -489,7 +505,7 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     SWKBD("Ввод текста", "Введите имя", "Лошадь", "ОК", "Отмена", "Контроллер: A — ОК, B — отмена"),
 
     [UI_MENU_TITLE] = "Настройки",
-    [UI_MENU_TAB_SCREEN] = "Экран", [UI_MENU_TAB_GAME] = "Игра", [UI_MENU_TAB_MODS] = "Моды", [UI_MENU_TAB_SOUND] = "Звук",
+    [UI_MENU_TAB_SCREEN] = "Настройки графики", [UI_MENU_TAB_DLSS_NR] = "DLSS NR", [UI_MENU_TAB_GAME] = "Игра", [UI_MENU_TAB_MODS] = "Моды", [UI_MENU_TAB_SOUND] = "Звук",
     [UI_MENU_TAB_CONTROLS] = "Управление", [UI_MENU_TAB_AMIIBO] = "Amiibo", [UI_MENU_TAB_MENU] = "Меню", [UI_MENU_TAB_ADVANCED] = "Дополнительно",
     [UI_MENU_CONTINUE] = "Продолжить", [UI_MENU_QUIT] = "Выйти из игры",
     [UI_MENU_ON] = "Вкл.", [UI_MENU_OFF] = "Выкл.", [UI_MENU_AUTO] = "Автоматически",
@@ -920,7 +936,7 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     SWKBD("Inserir texto", "Insira um nome", "Cavalo", "OK", "Cancelar", "Controle: A = OK, B = Cancelar"),
 
     [UI_MENU_TITLE] = "Configurações",
-    [UI_MENU_TAB_SCREEN] = "Tela", [UI_MENU_TAB_GAME] = "Jogo", [UI_MENU_TAB_SOUND] = "Som",
+    [UI_MENU_TAB_SCREEN] = "Configurações Gráficas", [UI_MENU_TAB_DLSS_NR] = "DLSS NR", [UI_MENU_TAB_GAME] = "Jogo", [UI_MENU_TAB_SOUND] = "Som",
     [UI_MENU_TAB_CONTROLS] = "Controles", [UI_MENU_TAB_AMIIBO] = "Amiibo", [UI_MENU_TAB_MENU] = "Menu", [UI_MENU_TAB_ADVANCED] = "Avançado",
     [UI_MENU_TAB_MODS] = "Mods",
     [UI_MENU_MODS_BUILTIN] = "Embutidos no port", [UI_MENU_MODS_INSTALLED] = "Mods instalados",
@@ -1383,7 +1399,7 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     SWKBD("文字输入", "请输入名字", "马儿", "确定", "取消", "手柄：A 确定，B 取消"),
 
     [UI_MENU_TITLE] = "设置",
-    [UI_MENU_TAB_SCREEN] = "显示",
+    [UI_MENU_TAB_SCREEN] = "画面与图形设置", [UI_MENU_TAB_DLSS_NR] = "DLSS NR",
     [UI_MENU_TAB_GAME] = "游戏",
     [UI_MENU_TAB_SOUND] = "声音",
     [UI_MENU_TAB_CONTROLS] = "操作",

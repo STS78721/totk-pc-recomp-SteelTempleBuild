@@ -382,7 +382,7 @@ extern "C" void menu_vk_release(void) {
 // TOTK_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (TOTK_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. totk.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
-enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_AMIIBO, TAB_MENU, TAB_ADVANCED, TAB_MODS, TAB_CHEATS, TAB_COUNT };
+enum { TAB_SCREEN, TAB_DLSS_NR, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_AMIIBO, TAB_MENU, TAB_ADVANCED, TAB_MODS, TAB_CHEATS, TAB_COUNT };
 enum { TEST_PAGE_FRAMES = 30, TEST_SETS = 16 };
 struct TestSet { uint64_t frame; char key[64], value[64]; };
 static struct {
@@ -846,6 +846,53 @@ static void tab_screen(float scale) {
     restart_confirm();
 }
 
+// Tab: NVIDIA DLSS 5 Neural Rendering (DLSS-NR via Streamline 2.14+)
+static void tab_dlss_nr(float scale) {
+    opt_begin("##dlss_nr", scale);
+    opt_group(UI_MENU_DLSS_NR_TITLE);
+
+    opt_toggle("TOTK_DLSS_NR", UI_MENU_DLSS_NR_ENABLE, UI_MENU_DLSS_NR_ENABLE_DESC);
+
+    static const char *const nr_preset_vals[] = {"quality", "balanced", "performance", "ultra_performance", "dlaa"};
+    static const char *const nr_preset_names[] = {
+        "Quality (Neural Super-Sampling + Reconstruction)",
+        "Balanced (Dynamic Neural Pacing)",
+        "Performance (High-Refresh Neural Reconstruction)",
+        "Ultra Performance (4K / 8K Neural Synthesis)",
+        "DLAA Native (100% Native + Neural Reconstruction)"
+    };
+    opt_choice_list("TOTK_DLSS_NR_PRESET", UI_MENU_DLSS_NR_PRESET, nr_preset_vals, nr_preset_names, 5, UI_MENU_DLSS_NR_PRESET_DESC);
+
+    static const char *const nr_model_vals[] = {"transformer_gen3", "transformer_gen2", "auto"};
+    static const char *const nr_model_names[] = {
+        "Transformer Gen 3 (DLSS 5 Neural Core)",
+        "Transformer Gen 2 (DLSS 4.5 Core)",
+        "Automatic Selection"
+    };
+    opt_choice_list("TOTK_DLSS_NR_MODEL", UI_MENU_DLSS_NR_MODEL, nr_model_vals, nr_model_names, 3, UI_MENU_DLSS_NR_MODEL_DESC);
+
+    static const char *const cache_vals[] = {"realtime", "high", "off"};
+    static const char *const cache_names[] = {"Real-Time AI Radiance Caching", "High-Density Radiance Caching", "Off"};
+    opt_choice_list("TOTK_DLSS_NR_RAY_CACHE", UI_MENU_DLSS_NR_RAY_CACHE, cache_vals, cache_names, 3, UI_MENU_DLSS_NR_RAY_CACHE_DESC);
+
+    opt_slider("TOTK_DLSS_NR_SHARPNESS", UI_MENU_DLSS_NR_SHARPNESS, 0, 100, UI_MENU_DLSS_NR_SHARPNESS_DESC, 5, "%.0f %%");
+
+    // Plugin detection check
+    static bool checked_plugin = false;
+    static bool plugin_found = false;
+    if (!checked_plugin) {
+        checked_plugin = true;
+        FILE *f = fopen("sl.dlss_nr.dll", "rb");
+        if (f) { fclose(f); plugin_found = true; }
+    }
+    const char *status_str = plugin_found ? "sl.dlss_nr.dll detected (Active)" : "Drop sl.dlss_nr.dll into GAME/ folder";
+    static const char *const stat_vals[] = {"info"};
+    const char *stat_names[] = {status_str};
+    opt_choice_list("##nr_status", UI_MENU_DLSS_NR_STATUS, stat_vals, stat_names, 1, UI_MENU_DLSS_NR_STATUS_DESC);
+
+    opt_end();
+}
+
 static void tab_game(float scale) {
     opt_begin("##game", scale);
     row_fps_limit();
@@ -1172,9 +1219,11 @@ static void tab_advanced(float scale) {
     }
 }
 
-static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN,   UI_MENU_TAB_GAME,   UI_MENU_TAB_SOUND,
-                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_AMIIBO, UI_MENU_TAB_MENU,
-                                              UI_MENU_TAB_ADVANCED, UI_MENU_TAB_MODS,   UI_MENU_TAB_CHEATS};
+static const UiTextId kTabNames[TAB_COUNT] = {
+    UI_MENU_TAB_SCREEN,   UI_MENU_TAB_DLSS_NR, UI_MENU_TAB_GAME,     UI_MENU_TAB_SOUND,
+    UI_MENU_TAB_CONTROLS, UI_MENU_TAB_AMIIBO,  UI_MENU_TAB_MENU,
+    UI_MENU_TAB_ADVANCED, UI_MENU_TAB_MODS,    UI_MENU_TAB_CHEATS
+};
 static int g_tab;               // the tab shown
 static int g_tab_request = -1;  // select this tab at the next layout; -1 none
 static int g_focus_page = -1;   // this tab's first row takes the cursor once it is shown; -1 none
@@ -1292,7 +1341,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     // the port version and the game update, right-aligned on the title line: what a bug report needs first
     char game[16], version[128], pver[64];
     snprintf(game, sizeof game, "%d.%d.%d", rt_game_version / 100, rt_game_version / 10 % 10, rt_game_version % 10);
-    snprintf(pver, sizeof pver, "%s-beta2 (Next Gen STS Build)", rt_port_version);
+    snprintf(pver, sizeof pver, "%s-exp-dlssnr (Next Gen STS Build)", rt_port_version);
     snprintf(version, sizeof version, menu_text(UI_MENU_VERSION), pver, game);
     ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(version).x);
     ImGui::TextDisabled("%s", version);
@@ -1323,6 +1372,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
             opt_reserve_bottom(bottom);
             switch (k) {
             case TAB_SCREEN: tab_screen(scale); break;
+            case TAB_DLSS_NR: tab_dlss_nr(scale); break;
             case TAB_GAME: tab_game(scale); break;
             case TAB_MODS: tab_mods(scale); break;
             case TAB_SOUND: tab_sound(scale); break;
