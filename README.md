@@ -27,22 +27,31 @@ The **Beta 2 Unified Release** (`v0.3.4-beta-2-steeltemple`) consolidates all ex
    - Integrated full Intel XeGTAO high-performance ground-truth ambient occlusion alongside SSAO, HBAO, and Native Switch AO.
    - Micro-shadowing depth and contact shadow realism with negligible GPU overhead.
 
-3. **Unified Guided Upscaler Engine**
+3. **Depth-Guided Hybrid Motion Vectors & Live Visualizer**
+   - **Per-Object Velocity Tracking**: Hybrid motion vector engine combining 100% exact analytical camera reprojection for static scenery with depth-guided temporal disocclusion tracking for dynamic actors (Link running, swinging weapons, charging enemies, flying arrows).
+   - **Eliminates Ghosting**: Supplies NVIDIA DLSS with complete character-level motion vectors, completely eliminating the temporal ghosting, smearing, and trailing typical of camera-only implementations.
+   - **Live Motion Vector Visualizer**: Built-in debug renderer (`TOTK_MV_DEBUG=1` or menu switch) mapping 2D velocities to standard diagnostic RGB colors (neutral grey stationary, vivid red/green/cyan directional vectors) to visually verify character tracking in real time.
+
+4. **NVIDIA DLSS-NR Integration with Forced Preset B**
+   - **Streamline DLSS-NR (`sl.dlss_nr.dll`)**: Dedicated in-game menu tab with neural reconstruction, real-time AI radiance caching, and micro-contrast sliders.
+   - **Forced Preset B**: Automatically engages NVIDIA's fast neural model (`NVSDK_NGX_DLSS_Hint_Render_Preset_B`), providing a substantial frame time reduction and higher frame rates compared to previous model iterations without compromising clarity.
+
+5. **Unified Guided Upscaler Engine**
    - **NVIDIA DLSS 4 / 4.5**: Next-generation Transformer neural network models (Presets `K`, `J`, `M`, `L`) and DLSS 3 CNN models (Presets `E`, `C`) with DLAA support.
    - **AMD FidelityFX Super Resolution**: Modern FSR 4.1.2 context-aware neural pipeline and FSR 1.0 spatial upscaler for universal hardware support.
 
-4. **Multi-Frame Generation Hub**
+6. **Multi-Frame Generation Hub**
    - **NVIDIA DLSS Frame Generation**: Full optical flow and motion-vector frame interpolation (`2x`), with Multi-Frame Generation (`4x` and `6x` MFG) hardware-gated to RTX 50-series GPUs.
    - **AMD FSR 3.1 & FSR 4 AI Frame Generation**: High-performance frame interpolation optimized across modern Radeon cards (including RX 9070 XT, RX 7900 XTX, and RDNA 3/4).
 
-5. **Ultra-Low Latency Synchronization**
+7. **Ultra-Low Latency Synchronization**
    - **NVIDIA Reflex** native integration (`VK_NV_low_latency2`): `Off`, `On`, and `On + Boost`.
    - **AMD Anti-Lag 2** native pipeline (`VK_AMD_anti_lag`): In-engine frame pacing and driver queue synchronization to eliminate input lag during frame generation.
 
-6. **Next Gen STS Interface & Tab Overhaul**
+8. **Next Gen STS Interface & Tab Overhaul**
    - Rebranded header: `TotK Recomp 0.3.4-beta-2 (Next Gen STS Build)`.
    - Dedicated **Graphics Settings** tab (formerly Screen tab) organizing resolution, upscaling, ambient occlusion, and display options.
-   - Dedicated **DLSS NR** tab previewing upcoming DLSS 5 Neural Rendering controls.
+   - Dedicated **DLSS NR** tab previewing DLSS 5 Neural Rendering controls and Preset B acceleration.
    - Full OLED HDR10 calibration (`Vivid`, `Clarity`, `Custom`) with dynamic peak brightness, game exposure, and HUD white point sliders.
 
 ---
