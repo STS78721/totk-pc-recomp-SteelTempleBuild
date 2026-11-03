@@ -10,6 +10,7 @@
 // SavageWindRecomp's runtime/ui/menu.mm (https://github.com/Revivedx/SavageWindRecomp @
 // 575ad88e02f9a89a9a885d90039d48af33c982f4, MIT, Copyright (c) 2026 Revivedx and the Savage Wind Recomp contributors,
 // Copyright (c) 2026 Peiikai); the pages are rows of option_rows.cpp.
+#include <algorithm>
 #include <atomic>
 #include <limits.h>
 #include <math.h>
@@ -55,8 +56,15 @@ int vk_gpu_is_nvidia(void);
 int vk_gpu_is_rtx40_plus(void);
 int vk_gpu_is_rtx50(void);
 int vk_gpu_is_rx9000(void);
+int vk_gpu_is_intel(void);
+int vk_gpu_is_intel_arc(void);
 int vk_has_amd_antilag(void);
 int vk_fg_active_multiplier(void);
+int vk_xess_wanted(void);
+int vk_xess_available(void);
+int vk_xess_is_xmx(void);
+const char *vk_xess_model_name(void);
+uint64_t vk_xess_dispatches(void);
 void res_sizes(unsigned out[2], unsigned scene[2]);
 void res_wanted(unsigned out[2]);
 void res_wanted_scene(unsigned scene[2]);
@@ -537,26 +545,27 @@ static void row_render_scale(void) {
     }
 }
 
-// Unified upscaler & anti-aliasing rows: DLSS 4 / 4.5, FSR 4.1.2, FSR 1.0, and Bilinear in one place.
-// Selecting FSR or Bilinear forces TOTK_DLAA off; selecting DLSS turns it on.
-// Only the active upscaler's sub-options (DLSS model vs FSR sharpness) are shown.
+// Unified upscaler & anti-aliasing rows: DLSS 4 / 4.5, AMD FSR 4.1.2, Intel XeSS AI, FSR 1.0, and Bilinear.
 static bool rows_upscaler(void) {
     bool ask_restart = false;
-    static const char *const up_vals[] = {"dlss", "fsr4", "fsr", "bilinear"};
+    opt_group_text("AI Super Resolution & Anti-Aliasing");
+    static const char *const up_vals[] = {"dlss", "fsr4", "xess", "fsr", "bilinear"};
     const char *dp = cfg_value("TOTK_DLSS_PRESET");
     const char *dlss_title = (!strcmp(dp, "preset_m") || !strcmp(dp, "preset_l")) ? "NVIDIA DLSS 4.5"
                            : (!strcmp(dp, "preset_k") || !strcmp(dp, "preset_j")) ? "NVIDIA DLSS 4"
                            : (!strcmp(dp, "preset_e") || !strcmp(dp, "preset_c")) ? "NVIDIA DLSS 3 (CNN)"
                                                                                    : "NVIDIA DLSS 4 / 4.5";
-    const char *up_names[] = {dlss_title, "AMD FSR 4.1.2", menu_text(UI_MENU_UPSCALER_FSR),
+    const char *xess_title = vk_xess_model_name();
+    const char *up_names[] = {dlss_title, "AMD FSR 4.1.2", xess_title, menu_text(UI_MENU_UPSCALER_FSR),
                               menu_text(UI_MENU_UPSCALER_BILINEAR)};
     if (cfg_bool("TOTK_DLAA") && strcmp(cfg_value("TOTK_UPSCALER"), "dlss")) cfg_set("TOTK_UPSCALER", "dlss");
-    if (opt_choice_list("TOTK_UPSCALER", UI_MENU_UPSCALER, up_vals, up_names, 4, UI_MENU_UPSCALER_DESC)) {
+    if (opt_choice_list("TOTK_UPSCALER", UI_MENU_UPSCALER, up_vals, up_names, 5, UI_MENU_UPSCALER_DESC)) {
         cfg_set("TOTK_DLAA", !strcmp(cfg_value("TOTK_UPSCALER"), "dlss") ? "1" : "0");
         cfg_save();
     }
     const char *up = cfg_value("TOTK_UPSCALER");
     bool is_dlss = !strcmp(up, "dlss");
+    bool is_xess = !strcmp(up, "xess");
     bool is_fsr = !strcmp(up, "fsr4") || !strcmp(up, "fsr");
     static const struct { const char *name, *label, *dlss, *scale, *model; } p[] = {
         {"native", "Native / DLAA (100%)", "dlaa", "100", "preset_k"},
@@ -566,7 +575,7 @@ static bool rows_upscaler(void) {
         {"ultra_performance", "Ultra Performance (33%)", "ultra_performance", "33", "preset_l"}};
     static const char *vals[5], *names[5];
     for (int i = 0; i < 5; i++) vals[i] = p[i].name, names[i] = p[i].label;
-    if (is_dlss || is_fsr) {
+    if (is_dlss || is_fsr || is_xess) {
         unsigned out_sz[2], cur_sc[2], want_sc[2];
         res_sizes(out_sz, cur_sc);
         res_wanted_scene(want_sc);
@@ -598,13 +607,39 @@ static bool rows_upscaler(void) {
             "DLSS 3 CNN (Preset E)", "DLSS 3 CNN (Preset C)", "Default (Auto)"};
         opt_choice_list("TOTK_DLSS_PRESET", UI_MENU_DLSS_MODEL, model_vals, model_names, 7, UI_MENU_DLSS_MODEL_DESC);
     }
+    if (is_xess) {
+        static const char *const xess_q_vals[] = {
+            "ultra_quality_plus", "ultra_quality", "quality", "balanced", "performance", "ultra_performance", "aa"
+        };
+        static const char *const xess_q_names[] = {
+            "Ultra Quality Plus (1.3x - Maximum Clarity)",
+            "Ultra Quality (1.5x - High Fidelity)",
+            "Quality (1.7x - Balanced AI - Recommended)",
+            "Balanced (2.0x - Performance Boost)",
+            "Performance (2.3x - High Framerate)",
+            "Ultra Performance (3.0x - Maximum FPS)",
+            "Native AA (1.0x - Anti-Aliasing Only)"
+        };
+        const char *xess_note = vk_xess_is_xmx() ? "Hardware XMX Matrix Acceleration (Intel Arc)"
+                                                 : "Universal DP4a Vector Acceleration";
+        opt_choice_list("TOTK_XESS_QUALITY", UI_MENU_XESS_QUALITY, xess_q_vals, xess_q_names, 7,
+                        UI_MENU_XESS_QUALITY_DESC, -1, xess_note);
+    }
     if (is_fsr) {
         opt_slider("TOTK_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");
     }
-    // Hardware-aware Frame Generation (DLSS Frame Gen Presets A/B/C + MFG 2x/4x/6x, FSR 3.1 FG, FSR 4 AI FG)
-    static const char *const fg_vals[] = {"off", "dlss_fg", "fsr3_fg", "fsr4_fg"};
-    static const char *const fg_names[] = {"Off", "NVIDIA DLSS Frame Gen", "AMD FSR 3.1 Frame Gen",
-                                           "AMD FSR 4 AI Frame Gen"};
+    opt_toggle("TOTK_FXAA", UI_MENU_FXAA, UI_MENU_FXAA_DESC);
+
+    // AI Frame Generation
+    opt_group_text("AI Frame Generation (Smooth Motion)");
+    static const char *const fg_vals[] = {"off", "dlss_fg", "xefg", "fsr3_fg", "fsr4_fg"};
+    static const char *const fg_names[] = {
+        "Off",
+        "NVIDIA DLSS Frame Gen (GeForce RTX)",
+        "Intel Xe Frame Gen - XeFG (Arc)",
+        "AMD FSR 3.1 Frame Gen (Universal)",
+        "AMD FSR 4 AI Frame Gen (RDNA4+)"
+    };
     static char fg_note[128];
     const char *fgn = nullptr;
     const char *fg_cur = cfg_value("TOTK_FG_MODE");
@@ -614,12 +649,18 @@ static bool rows_upscaler(void) {
     } else if (!strcmp(fg_cur, "dlss_fg") && !vk_gpu_is_nvidia()) {
         snprintf(fg_note, sizeof fg_note, "requires NVIDIA RTX GPU (using FSR 3.1 FG)");
         fgn = fg_note;
+    } else if (!strcmp(fg_cur, "xefg") && !vk_gpu_is_intel()) {
+        snprintf(fg_note, sizeof fg_note, "Intel Arc GPU recommended for hardware XeFG pipeline");
+        fgn = fg_note;
     }
-    if (opt_choice_list("TOTK_FG_MODE", UI_MENU_FG_MODE, fg_vals, fg_names, 4, UI_MENU_FG_MODE_DESC, -1, fgn)) {
+    if (opt_choice_list("TOTK_FG_MODE", UI_MENU_FG_MODE, fg_vals, fg_names, 5, UI_MENU_FG_MODE_DESC, -1, fgn)) {
         const char *fg_new = cfg_value("TOTK_FG_MODE");
         if (!strcmp(fg_new, "dlss_fg")) {
             cfg_set("TOTK_REFLEX", "boost");
             if (!vk_gpu_is_rtx50()) cfg_set("TOTK_FG_MULT", "2x");
+        } else if (!strcmp(fg_new, "xefg")) {
+            cfg_set("TOTK_XELL", "boost");
+            cfg_set("TOTK_FG_MULT", "2x");
         } else if (!strcmp(fg_new, "fsr3_fg") || !strcmp(fg_new, "fsr4_fg")) {
             cfg_set("TOTK_ANTILAG2", "on");
             if (vk_gpu_is_nvidia() && !strcmp(cfg_value("TOTK_REFLEX"), "off")) cfg_set("TOTK_REFLEX", "on");
@@ -630,6 +671,7 @@ static bool rows_upscaler(void) {
     fg_cur = cfg_value("TOTK_FG_MODE");
     bool fg_on = strcmp(fg_cur, "off") != 0;
     bool fg_dlss = !strcmp(fg_cur, "dlss_fg") && vk_gpu_is_nvidia();
+    bool fg_xefg = !strcmp(fg_cur, "xefg");
     if (fg_dlss) {
         static const char *const fgp_vals[] = {"preset_a", "preset_b", "preset_c"};
         static const char *const fgp_names[] = {"DLSS FG Transformer (Preset A)", "DLSS FG Optical Flow (Preset B)",
@@ -637,30 +679,60 @@ static bool rows_upscaler(void) {
         opt_choice_list("TOTK_FG_PRESET", UI_MENU_FG_PRESET, fgp_vals, fgp_names, 3, UI_MENU_FG_PRESET_DESC);
     }
     if (fg_on) {
-        static const char *const fgm_vals[] = {"2x", "4x", "6x"};
-        static const char *const fgm_names[] = {"2x (Standard FG)", "4x (MFG - RTX 50 Series)",
-                                                "6x (MFG - RTX 50 Series)"};
+        static const char *const fgm_vals[] = {"2x", "3x", "4x", "6x"};
+        static const char *const fgm_names[] = {
+            "2x (Standard FG - Double FPS)",
+            "3x (Triple Frame Synthesis)",
+            "4x (Quad Frame Synthesis)",
+            "6x (MFG - RTX 50 Series)"
+        };
         static char mult_note[128];
         const char *mn = nullptr;
         const char *mcur = cfg_value("TOTK_FG_MULT");
-        if (strcmp(mcur, "2x") != 0 && (!fg_dlss || !vk_gpu_is_rtx50())) {
-            snprintf(mult_note, sizeof mult_note,
-                     !fg_dlss ? "FSR Frame Gen supports 2x (active: 2x)"
-                              : "MFG 4x / 6x requires RTX 50 Series (active: 2x)");
-            mn = mult_note;
+        if (fg_xefg) {
+            if (!strcmp(mcur, "6x")) {
+                snprintf(mult_note, sizeof mult_note, "XeFG supports up to 4x (active: 4x)");
+                mn = mult_note;
+            }
+            opt_choice_list("TOTK_FG_MULT", UI_MENU_FG_MULT, fgm_vals, fgm_names, 3, UI_MENU_FG_MULT_DESC, -1, mn);
+        } else if (fg_dlss) {
+            if (strcmp(mcur, "2x") != 0 && !vk_gpu_is_rtx50()) {
+                snprintf(mult_note, sizeof mult_note, "MFG 4x / 6x requires RTX 50 Series (active: 2x)");
+                mn = mult_note;
+            }
+            opt_choice_list("TOTK_FG_MULT", UI_MENU_FG_MULT, fgm_vals, fgm_names, 4, UI_MENU_FG_MULT_DESC, -1, mn);
+        } else {
+            if (strcmp(mcur, "2x") != 0) {
+                snprintf(mult_note, sizeof mult_note, "FSR Frame Gen supports 2x (active: 2x)");
+                mn = mult_note;
+            }
+            static const char *const fsr_m_vals[] = {"2x"};
+            static const char *const fsr_m_names[] = {"2x (Standard FG)"};
+            opt_choice_list("TOTK_FG_MULT", UI_MENU_FG_MULT, fsr_m_vals, fsr_m_names, 1, UI_MENU_FG_MULT_DESC, -1, mn);
         }
-        opt_choice_list("TOTK_FG_MULT", UI_MENU_FG_MULT, fgm_vals, fgm_names, 3, UI_MENU_FG_MULT_DESC, -1, mn);
     }
+
+    // Low Latency
+    opt_group_text("Input Latency & Responsiveness");
     static const char *const reflex_vals[] = {"off", "on", "boost"};
     static const char *const reflex_names[] = {"Off", "On", "On + Boost"};
-    opt_choice_list("TOTK_REFLEX", UI_MENU_REFLEX, reflex_vals, reflex_names, 3, UI_MENU_REFLEX_DESC);
+    const char *ref_note = vk_gpu_is_nvidia() ? "VK_NV_low_latency2 Active" : "Requires NVIDIA GPU";
+    opt_choice_list("TOTK_REFLEX", UI_MENU_REFLEX, reflex_vals, reflex_names, 3, UI_MENU_REFLEX_DESC, -1, ref_note);
+
     static const char *const al_vals[] = {"off", "on"};
     static const char *const al_names[] = {"Off", "On"};
     const char *al_note = (!strcmp(cfg_value("TOTK_ANTILAG2"), "on") && !vk_has_amd_antilag())
                               ? (vk_gpu_is_nvidia() ? "paired with NVIDIA Reflex on RTX GPU" : "driver pacing active")
                               : nullptr;
     opt_choice_list("TOTK_ANTILAG2", UI_MENU_ANTILAG2, al_vals, al_names, 2, UI_MENU_ANTILAG2_DESC, -1, al_note);
-    opt_toggle("TOTK_FXAA", UI_MENU_FXAA, UI_MENU_FXAA_DESC);
+
+    static const char *const xell_vals[] = {"off", "on", "boost"};
+    static const char *const xell_names[] = {"Off", "On", "On + Boost"};
+    const char *xell_note = (!strcmp(cfg_value("TOTK_XELL"), "on") || !strcmp(cfg_value("TOTK_XELL"), "boost"))
+                                ? (vk_gpu_is_intel() ? "Intel XeLL frame pacing active" : "driver frame pacing")
+                                : nullptr;
+    opt_choice_list("TOTK_XELL", UI_MENU_XELL, xell_vals, xell_names, 3, UI_MENU_XELL_DESC, -1, xell_note);
+
     return ask_restart;
 }
 
@@ -813,6 +885,8 @@ static void restart_confirm(void);
 
 static void tab_screen(float scale) {
     opt_begin("##screen", scale);
+
+    opt_group_text("Display & Window Configuration");
     opt_toggle("TOTK_FULLSCREEN", UI_MENU_FULLSCREEN, UI_MENU_FULLSCREEN_DESC);
     row_window_size();
     static const UiTextId present[] = {UI_MENU_PRESENT_MAILBOX, UI_MENU_PRESENT_VSYNC, UI_MENU_PRESENT_IMMEDIATE};
@@ -820,23 +894,29 @@ static void tab_screen(float scale) {
     row_gpu();
     static const UiTextId perf[] = {UI_MENU_PERF_OFF, UI_MENU_PERF_FPS, UI_MENU_PERF_FULL};
     opt_choice("TOTK_PERF_OVERLAY", UI_MENU_PERF_OVERLAY, perf, 3, UI_MENU_PERF_OVERLAY_DESC);
-    opt_group(UI_MENU_GRAPHICS);
-    row_output_res();
-    row_render_scale();
-    bool ask = rows_upscaler();
-    row_shadow_res();
     static const UiTextId aspect[] = {UI_MENU_ASPECT_FIT, UI_MENU_ASPECT_STRETCH};
     opt_choice("TOTK_ASPECT", UI_MENU_ASPECT, aspect, 2, UI_MENU_ASPECT_DESC);
     opt_slider("TOTK_FOV", UI_MENU_FOV, 70, 140, UI_MENU_FOV_DESC, 5, "%.0f %%");
-    static const char *const aniso[] = {"game", "2", "4", "8", "16"};
-    const char *aniso_names[] = {menu_text(UI_MENU_ANISO_GAME), "2x", "4x", "8x", "16x"};
-    opt_choice_list("TOTK_ANISO", UI_MENU_ANISO, aniso, aniso_names, 5, UI_MENU_ANISO_DESC);
+
+    opt_group_text("Resolution & Scaling");
+    row_output_res();
+    row_render_scale();
+
+    bool ask = rows_upscaler();
+
+    opt_group_text("Shadows, Lighting & Ambient Occlusion");
+    row_shadow_res();
     row_shadow_scale();
     row_shadow_range();
     opt_slider("TOTK_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
     rows_ao();
+    static const char *const aniso[] = {"game", "2", "4", "8", "16"};
+    const char *aniso_names[] = {menu_text(UI_MENU_ANISO_GAME), "2x", "4x", "8x", "16x"};
+    opt_choice_list("TOTK_ANISO", UI_MENU_ANISO, aniso, aniso_names, 5, UI_MENU_ANISO_DESC);
+
     rows_color();
-    opt_group(UI_MENU_HDR_GROUP);
+
+    opt_group_text("High Dynamic Range (HDR)");
     opt_toggle("TOTK_HDR", UI_MENU_HDR, UI_MENU_HDR_DESC);
     opt_slider("TOTK_HDR_PEAK_NITS", UI_MENU_HDR_PEAK, 400, 10000, UI_MENU_HDR_PEAK_DESC, 50, "%.0f");
     opt_slider("TOTK_HDR_GAME_NITS", UI_MENU_HDR_GAME, 80, 500, UI_MENU_HDR_GAME_DESC, 5, "%.0f");
@@ -853,6 +933,39 @@ static void tab_dlss_nr(float scale) {
     opt_begin("##dlss_nr", scale);
     opt_group(UI_MENU_DLSS_NR_TITLE);
 
+    // Plugin detection check and hardware check
+    static bool checked_plugin = false;
+    static bool sl_found = false, nv_found = false;
+    if (!checked_plugin) {
+        checked_plugin = true;
+        FILE *f1 = fopen("sl.dlss_nr.dll", "rb");
+        if (f1) { fclose(f1); sl_found = true; }
+        FILE *f2 = fopen("nvngx_dlssnr.dll", "rb");
+        if (f2) { fclose(f2); nv_found = true; }
+    }
+
+    bool is_nvidia = vk_gpu_is_nvidia();
+    bool can_enable = is_nvidia && (sl_found || nv_found);
+
+    if (!can_enable) {
+        if (cfg_bool("TOTK_DLSS_NR")) {
+            cfg_set("TOTK_DLSS_NR", "0");
+            cfg_save();
+        }
+        if (!is_nvidia) {
+            opt_text_str("INCOMPATIBLE HARDWARE: NVIDIA GeForce RTX GPU required (Tensor Cores needed for DLSS Neural Reconstruction).", true);
+        } else {
+            opt_text_str("MISSING REQUIRED RUNTIME: Drop nvngx_dlssnr.dll or sl.dlss_nr.dll into the GAME directory.", true);
+        }
+    }
+
+    const char *dis_note = !is_nvidia
+        ? "Disabled: NVIDIA GeForce RTX GPU Required"
+        : (!sl_found && !nv_found)
+            ? "Disabled: nvngx_dlssnr.dll Missing"
+            : nullptr;
+
+    if (!can_enable) opt_disable_next_text(dis_note);
     opt_toggle("TOTK_DLSS_NR", UI_MENU_DLSS_NR_ENABLE, UI_MENU_DLSS_NR_ENABLE_DESC);
 
     static const char *const nr_preset_vals[] = {"preset_b", "preset_a", "auto"};
@@ -861,6 +974,7 @@ static void tab_dlss_nr(float scale) {
         "Preset A (Standard Neural Model)",
         "Automatic Selection"
     };
+    if (!can_enable) opt_disable_next_text(dis_note);
     opt_choice_list("TOTK_DLSS_NR_PRESET", UI_MENU_DLSS_NR_PRESET, nr_preset_vals, nr_preset_names, 3, UI_MENU_DLSS_NR_PRESET_DESC);
 
     static const char *const scale_vals[] = {"auto", "1.0", "0.85", "0.75", "0.5"};
@@ -871,6 +985,7 @@ static void tab_dlss_nr(float scale) {
         "0.75 (High Performance)",
         "0.5 (Maximum Performance - 4x Faster)"
     };
+    if (!can_enable) opt_disable_next_text(dis_note);
     opt_choice_list("TOTK_DLSS_NR_SCALE", UI_MENU_DLSS_NR_SCALE, scale_vals, scale_names, 5, UI_MENU_DLSS_NR_SCALE_DESC);
 
     static const char *const color_vals[] = {"0.0", "0.25", "0.5", "0.75", "1.0"};
@@ -881,6 +996,7 @@ static void tab_dlss_nr(float scale) {
         "0.75 (Vibrant AI Transfer)",
         "1.0 (Full AI Neural Synthesis)"
     };
+    if (!can_enable) opt_disable_next_text(dis_note);
     opt_choice_list("TOTK_DLSS_NR_COLOR", UI_MENU_DLSS_NR_COLOR, color_vals, color_names, 5, UI_MENU_DLSS_NR_COLOR_DESC);
 
     static const char *const transfer_vals[] = {"auto", "1.0", "0.75", "0.5"};
@@ -890,23 +1006,17 @@ static void tab_dlss_nr(float scale) {
         "0.75 (Balanced Blend)",
         "0.5 (Soft Transfer)"
     };
+    if (!can_enable) opt_disable_next_text(dis_note);
     opt_choice_list("TOTK_DLSS_NR_TRANSFER", UI_MENU_DLSS_NR_TRANSFER, transfer_vals, transfer_names, 4, UI_MENU_DLSS_NR_TRANSFER_DESC);
 
+    if (!can_enable) opt_disable_next_text(dis_note);
     opt_slider("TOTK_DLSS_NR_SHARPNESS", UI_MENU_DLSS_NR_SHARPNESS, 0, 100, UI_MENU_DLSS_NR_SHARPNESS_DESC, 5, "%.0f %%");
 
-    // Plugin detection check and real-time execution telemetry
-    static bool checked_plugin = false;
-    static bool sl_found = false, nv_found = false;
-    if (!checked_plugin) {
-        checked_plugin = true;
-        FILE *f1 = fopen("sl.dlss_nr.dll", "rb");
-        if (f1) { fclose(f1); sl_found = true; }
-        FILE *f2 = fopen("nvngx_dlssnr.dll", "rb");
-        if (f2) { fclose(f2); nv_found = true; }
-    }
     char status_str[128];
     uint64_t nr_frames = vk_dlss_nr_dispatches();
-    if (sl_found && nv_found) {
+    if (!is_nvidia) {
+        snprintf(status_str, sizeof(status_str), "Incompatible GPU (Requires GeForce RTX)");
+    } else if (sl_found && nv_found) {
         if (cfg_bool("TOTK_DLSS_NR")) {
             if (nr_frames > 0) {
                 snprintf(status_str, sizeof(status_str), "Active (Preset B | nvngx_dlssnr | %llu frames)", (unsigned long long)nr_frames);
@@ -919,7 +1029,7 @@ static void tab_dlss_nr(float scale) {
     } else if (sl_found) {
         snprintf(status_str, sizeof(status_str), "Detected (sl.dlss_nr.dll Active)");
     } else {
-        snprintf(status_str, sizeof(status_str), "Missing (Drop sl.dlss_nr.dll into GAME/ folder)");
+        snprintf(status_str, sizeof(status_str), "Missing (Drop nvngx_dlssnr.dll into GAME/ folder)");
     }
     opt_button("##nr_status", UI_MENU_DLSS_NR_STATUS, UI_MENU_DLSS_NR_STATUS_DESC, status_str);
 
@@ -1498,8 +1608,15 @@ static char g_perf_upscaler[64];
 static char g_perf_line2[128];
 static char g_perf_fg_badge[32];
 static char g_perf_nr_badge[32];
-static int  g_perf_theme;                // 0: NVIDIA green, 1: AMD red, 2: Cyber cyan
+static int  g_perf_theme;                // 0: NVIDIA green, 1: AMD red, 2: Cyber cyan, 3: Intel blue
 static bool g_perf_nr_active;
+static uint32_t g_dt_ring[1000];
+static int g_dt_count = 0;
+static int g_dt_head = 0;
+static char g_perf_1pct_num[32];
+static char g_perf_01pct_num[32];
+static double g_perf_1pct_fps = 0.0;
+static double g_perf_01pct_fps = 0.0;
 
 static int perf_mode_of(const char *s) { return !strcmp(s, "full") ? 2 : !strcmp(s, "fps") ? 1 : 0; }
 
@@ -1542,6 +1659,8 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
         if (m != g_perf_mode) {
             g_perf_last_ns = 0, g_perf_text[0] = 0;
             g_perf_fps_num[0] = 0;
+            g_perf_1pct_num[0] = 0;
+            g_perf_01pct_num[0] = 0;
             if (m == 2) perf_gpu_once(t);
             perfmon_mode(m);
         }
@@ -1556,6 +1675,12 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
         g_perf_win_ns += d;
         g_perf_frames++;
         if (d > g_perf_max_ns) g_perf_max_ns = d;
+
+        // Record into rolling 1000-frame ring buffer for 1% and 0.1% low calculation
+        g_dt_ring[g_dt_head] = (uint32_t)(d > 2000000000ull ? 2000000000ull : d);
+        g_dt_head = (g_dt_head + 1) % 1000;
+        if (g_dt_count < 1000) g_dt_count++;
+
         if (g_perf_win_ns >= 500000000ull) {
             int fgm = vk_fg_active_multiplier();
             double fps = (g_perf_frames * 1e9 / g_perf_win_ns) * (fgm > 1 ? fgm : 1);
@@ -1564,9 +1689,40 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             else snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.1f FPS", fps);
             snprintf(g_perf_ms_num, sizeof g_perf_ms_num, "%.1f ms", avg_ms);
 
+            // Compute 1% and 0.1% low FPS from sorted frame times in the rolling window
+            if (g_dt_count >= 10) {
+                uint32_t sorted_dt[1000];
+                int n_samples = g_dt_count;
+                memcpy(sorted_dt, g_dt_ring, n_samples * sizeof(uint32_t));
+                std::sort(sorted_dt, sorted_dt + n_samples);
+
+                // 99th percentile frame time = 1% Low FPS
+                int idx_1p = (int)(n_samples * 0.99f);
+                if (idx_1p >= n_samples) idx_1p = n_samples - 1;
+                // 99.9th percentile frame time = 0.1% Low FPS
+                int idx_01p = (int)(n_samples * 0.999f);
+                if (idx_01p >= n_samples) idx_01p = n_samples - 1;
+
+                uint32_t dt_1p = sorted_dt[idx_1p];
+                uint32_t dt_01p = sorted_dt[idx_01p];
+
+                double low_1p = (dt_1p > 0 ? (1e9 / (double)dt_1p) : fps) * (fgm > 1 ? fgm : 1);
+                double low_01p = (dt_01p > 0 ? (1e9 / (double)dt_01p) : fps) * (fgm > 1 ? fgm : 1);
+                g_perf_1pct_fps = low_1p;
+                g_perf_01pct_fps = low_01p;
+                snprintf(g_perf_1pct_num, sizeof g_perf_1pct_num, "1%% %.0f", low_1p);
+                snprintf(g_perf_01pct_num, sizeof g_perf_01pct_num, "0.1%% %.0f", low_01p);
+            } else {
+                g_perf_1pct_fps = fps;
+                g_perf_01pct_fps = fps;
+                snprintf(g_perf_1pct_num, sizeof g_perf_1pct_num, "1%% %.0f", fps);
+                snprintf(g_perf_01pct_num, sizeof g_perf_01pct_num, "0.1%% %.0f", fps);
+            }
+
             if (fgm > 1) {
                 const char *fgm_mode = cfg_value("TOTK_FG_MODE");
                 const char *fgt = (!strcmp(fgm_mode, "dlss_fg") && vk_gpu_is_nvidia()) ? "DLSS FG"
+                                : (!strcmp(fgm_mode, "xefg") && vk_gpu_is_intel()) ? "XeFG"
                                 : (!strcmp(fgm_mode, "fsr4_fg") && vk_gpu_is_rx9000()) ? "FSR4 FG" : "FSR3 FG";
                 snprintf(g_perf_fg_badge, sizeof g_perf_fg_badge, "%s %dx", fgt, fgm);
                 snprintf(g_perf_text, sizeof g_perf_text, "%.0f fps (FG %dx)", fps, fgm);
@@ -1579,6 +1735,7 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             bool is_nr = cfg_bool("TOTK_DLSS_NR");
             bool is_dlaa = cfg_bool("TOTK_DLAA");
             bool is_dlss = !strcmp(up, "dlss");
+            bool is_xess = !strcmp(up, "xess");
             bool is_fsr4 = !strcmp(up, "fsr4");
             bool is_fsr = !strcmp(up, "fsr");
             uint64_t nr_disp = vk_dlss_nr_dispatches();
@@ -1601,6 +1758,19 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 } else snprintf(pbuf, sizeof pbuf, "%s", preset && preset[0] ? preset : "Preset M");
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s · %s", is_dlaa ? "DLAA 4.5" : "DLSS 4.5", pbuf);
                 g_perf_nr_badge[0] = 0;
+            } else if (is_xess) {
+                g_perf_theme = 3;
+                const char *xq = cfg_value("TOTK_XESS_QUALITY");
+                const char *mode_name = !strcmp(xq, "ultra_quality_plus") ? "Ultra Quality+"
+                                      : !strcmp(xq, "ultra_quality") ? "Ultra Quality"
+                                      : !strcmp(xq, "quality") ? "Quality"
+                                      : !strcmp(xq, "balanced") ? "Balanced"
+                                      : !strcmp(xq, "performance") ? "Performance"
+                                      : !strcmp(xq, "ultra_performance") ? "Ultra Perf"
+                                      : !strcmp(xq, "aa") ? "Native AA" : "Quality";
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "Intel XeSS · %s (%s)", mode_name,
+                         vk_xess_is_xmx() ? "XMX" : "DP4a");
+                g_perf_nr_badge[0] = 0;
             } else if (is_fsr4) {
                 g_perf_theme = 1;
                 int s = cfg_int("TOTK_SHARPNESS");
@@ -1617,7 +1787,7 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 g_perf_nr_badge[0] = 0;
             }
 
-            // Line 2: Upscaler + Resolution scale + Hybrid MV + Reflex
+            // Line 2: Upscaler + Resolution scale + Hybrid MV + Reflex/XeLL
             unsigned out[2], scene[2];
             res_sizes(out, scene);
             char line2[128];
@@ -1630,11 +1800,13 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 else snprintf(res_buf, sizeof res_buf, " | %up -> %up", scene[1], out[1]);
                 strncat(line2, res_buf, sizeof(line2) - strlen(line2) - 1);
             }
-            if (is_nr || is_dlss || is_fsr4) {
+            if (is_nr || is_dlss || is_xess || is_fsr4) {
                 strncat(line2, " | Hybrid MV", sizeof(line2) - strlen(line2) - 1);
             }
             if (cfg_bool("TOTK_REFLEX")) {
                 strncat(line2, " | Reflex", sizeof(line2) - strlen(line2) - 1);
+            } else if (cfg_bool("TOTK_XELL")) {
+                strncat(line2, " | XeLL", sizeof(line2) - strlen(line2) - 1);
             }
             snprintf(g_perf_line2, sizeof g_perf_line2, "%s", line2);
 
@@ -1717,6 +1889,22 @@ static void perf_picture(const MenuTarget *t, const ImVec4 &c) {
     rows[n].label_id = UI_MENU_OV_SCENE;
     snprintf(rows[n].val, sizeof rows[n].val, menu_text(UI_MENU_OV_FMT_SCENE), scene[0], scene[1], scene[0] * 100.0 / (out[0] ? out[0] : 1));
     n++;
+
+    // 1% Low FPS row
+    if (g_perf_1pct_fps > 0) {
+        rows[n].label_str = "1% Low FPS";
+        rows[n].label_id = (UiTextId)0;
+        snprintf(rows[n].val, sizeof rows[n].val, "%.1f FPS", g_perf_1pct_fps);
+        n++;
+    }
+
+    // 0.1% Low FPS row
+    if (g_perf_01pct_fps > 0) {
+        rows[n].label_str = "0.1% Low FPS";
+        rows[n].label_id = (UiTextId)0;
+        snprintf(rows[n].val, sizeof rows[n].val, "%.1f FPS", g_perf_01pct_fps);
+        n++;
+    }
 
     // Scaling / Upscaler
     const char *up = cfg_value("TOTK_UPSCALER");
@@ -1908,10 +2096,12 @@ static void perf_draw(const MenuTarget *t, float scale) {
     float spacing_x = 8.0f * scale;
     float line_gap = 4.0f * scale;
 
-    // Line 1: [LED Dot] [FPS] [ms] [FG Badge] [NR Badge]
+    // Line 1: [LED Dot] [FPS]  1% [1% Low]  0.1% [0.1% Low]  [ms]  [FG Badge]  [NR Badge]
     float dot_rad = 3.5f * scale;
     float dot_area_w = dot_rad * 2.0f + 8.0f * scale;
     ImVec2 sz_fps = ImGui::CalcTextSize(g_perf_fps_num);
+    ImVec2 sz_1p = g_perf_1pct_num[0] ? ImGui::CalcTextSize(g_perf_1pct_num) : ImVec2(0, 0);
+    ImVec2 sz_01p = g_perf_01pct_num[0] ? ImGui::CalcTextSize(g_perf_01pct_num) : ImVec2(0, 0);
     ImVec2 sz_ms = ImGui::CalcTextSize(g_perf_ms_num);
 
     ImVec2 sz_fg = g_perf_fg_badge[0] ? ImGui::CalcTextSize(g_perf_fg_badge) : ImVec2(0, 0);
@@ -1920,7 +2110,10 @@ static void perf_draw(const MenuTarget *t, float scale) {
     ImVec2 sz_nr = g_perf_nr_badge[0] ? ImGui::CalcTextSize(g_perf_nr_badge) : ImVec2(0, 0);
     float nr_pill_w = g_perf_nr_badge[0] ? (sz_nr.x + 8.0f * scale) : 0.0f;
 
-    float line1_w = dot_area_w + sz_fps.x + spacing_x + sz_ms.x;
+    float line1_w = dot_area_w + sz_fps.x;
+    if (sz_1p.x > 0) line1_w += spacing_x + sz_1p.x;
+    if (sz_01p.x > 0) line1_w += spacing_x + sz_01p.x;
+    line1_w += spacing_x + sz_ms.x;
     if (fg_pill_w > 0) line1_w += spacing_x + fg_pill_w;
     if (nr_pill_w > 0) line1_w += spacing_x + nr_pill_w;
     float line1_h = sz_fps.y;
@@ -1939,16 +2132,19 @@ static void perf_draw(const MenuTarget *t, float scale) {
     // Color theme
     ImU32 border_col = (g_perf_theme == 0) ? IM_COL32(118, 185, 0, 180)   // NVIDIA RTX Green
                      : (g_perf_theme == 1) ? IM_COL32(235, 60, 60, 180)   // AMD Crimson
+                     : (g_perf_theme == 3) ? IM_COL32(0, 140, 255, 180)   // Intel Electric Blue
                      : IM_COL32(40, 160, 230, 160);                        // Cyber Cyan
 
     ImU32 dot_core_col = g_perf_nr_active     ? IM_COL32(118, 255, 0, 255)
                        : (g_perf_theme == 0)  ? IM_COL32(118, 185, 0, 255)
                        : (g_perf_theme == 1)  ? IM_COL32(245, 65, 65, 255)
+                       : (g_perf_theme == 3)  ? IM_COL32(0, 160, 255, 255)
                        : IM_COL32(50, 185, 255, 255);
 
     ImU32 dot_glow_col = g_perf_nr_active     ? IM_COL32(118, 255, 0, 75)
                        : (g_perf_theme == 0)  ? IM_COL32(118, 185, 0, 65)
                        : (g_perf_theme == 1)  ? IM_COL32(245, 65, 65, 65)
+                       : (g_perf_theme == 3)  ? IM_COL32(0, 140, 255, 75)
                        : IM_COL32(50, 185, 255, 65);
 
     // Card background & sleek rounded border
@@ -1968,6 +2164,18 @@ static void perf_draw(const MenuTarget *t, float scale) {
     // Numeric FPS
     dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(255, 255, 255, 255), g_perf_fps_num);
     cur_x += sz_fps.x + spacing_x;
+
+    // 1% Low
+    if (sz_1p.x > 0) {
+        dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(210, 225, 245, 225), g_perf_1pct_num);
+        cur_x += sz_1p.x + spacing_x;
+    }
+
+    // 0.1% Low
+    if (sz_01p.x > 0) {
+        dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(180, 205, 235, 200), g_perf_01pct_num);
+        cur_x += sz_01p.x + spacing_x;
+    }
 
     // Frame Time
     dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(160, 185, 215, 230), g_perf_ms_num);
@@ -2006,11 +2214,12 @@ static void perf_draw(const MenuTarget *t, float scale) {
     ImVec2 sz_up = ImGui::CalcTextSize(g_perf_upscaler);
     ImU32 up_col = (g_perf_theme == 0) ? (g_perf_nr_active ? IM_COL32(125, 245, 45, 255) : IM_COL32(118, 195, 20, 255))
                  : (g_perf_theme == 1) ? IM_COL32(255, 95, 95, 255)
+                 : (g_perf_theme == 3) ? IM_COL32(30, 175, 255, 255)
                  : IM_COL32(95, 205, 250, 255);
     dl->AddText(ImVec2(l2_x, line2_y), up_col, g_perf_upscaler);
     l2_x += sz_up.x;
 
-    // Remaining text of line 2 (e.g. " | 1080p → 4K | Hybrid MV | Reflex")
+    // Remaining text of line 2 (e.g. " | 1080p -> 4K | Hybrid MV | Reflex")
     if (strlen(g_perf_line2) > strlen(g_perf_upscaler)) {
         const char *tail = g_perf_line2 + strlen(g_perf_upscaler);
         dl->AddText(ImVec2(l2_x, line2_y), IM_COL32(175, 190, 205, 225), tail);

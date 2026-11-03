@@ -166,6 +166,13 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_ANTILAG2] = "AMD Anti-Lag 2",
     [UI_MENU_ANTILAG2_DESC] = "Synchronises CPU frame pacing with GPU execution via VK_AMD_anti_lag to minimize click-to-photon "
                               "latency. Automatically guided to On when AMD FSR 3.1 or FSR 4 AI Frame Generation is enabled.",
+    [UI_MENU_XELL] = "Intel Xe Low Latency (XeLL)",
+    [UI_MENU_XELL_DESC] = "Intel Xe Low Latency frame pacing for Intel Arc and Iris Xe graphics. Dynamically synchronizes "
+                          "render dispatch and presentation to reduce click-to-photon latency.",
+    [UI_MENU_XESS_QUALITY] = "Intel XeSS Quality Preset",
+    [UI_MENU_XESS_QUALITY_DESC] = "Picks the Intel XeSS super sampling mode: Ultra Quality Plus (1.3x), Ultra Quality (1.5x), "
+                                  "Quality (1.7x), Balanced (2.0x), Performance (2.3x), Ultra Performance (3.0x), or Native AA (1.0x). "
+                                  "Accelerated by XMX AI matrix engines on Intel Arc, or universal DP4a vector neural instructions on other GPUs.",
     [UI_MENU_FXAA] = "Game anti-aliasing (FXAA)",
     [UI_MENU_FXAA_DESC] = "The game's own FXAA edge smoothing. It blurs fine detail a little; with DLAA on it is not needed.",
     [UI_MENU_DLSS_NR_TITLE] = "NVIDIA DLSS Neural Rendering (DLSS NR)",

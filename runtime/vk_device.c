@@ -200,8 +200,14 @@ static int pick_device(void) {
                               (strstr(g_vk.props.deviceName, "RTX 40") != NULL || g_vk.props.deviceID >= 0x2600));
     g_vk.gpu_is_rx9000 = g_vk.props.vendorID == 0x1002 &&
                          (strstr(g_vk.props.deviceName, "RX 90") != NULL || strstr(g_vk.props.deviceName, "RX90") != NULL);
-    rt_log("vk: using gpu %d: %s (nvidia=%d, rtx40+=%d, rtx50=%d, rx9000=%d)", best, g_vk.props.deviceName,
-           g_vk.gpu_is_nvidia, g_vk.gpu_is_rtx40_plus, g_vk.gpu_is_rtx50, g_vk.gpu_is_rx9000);
+    g_vk.gpu_is_intel = g_vk.props.vendorID == 0x8086;
+    g_vk.gpu_is_intel_arc = g_vk.gpu_is_intel &&
+                            (strstr(g_vk.props.deviceName, "Arc") != NULL ||
+                             strstr(g_vk.props.deviceName, "ARC") != NULL ||
+                             strstr(g_vk.props.deviceName, "Battlemage") != NULL ||
+                             strstr(g_vk.props.deviceName, "Alchemist") != NULL);
+    rt_log("vk: using gpu %d: %s (nvidia=%d, rtx40+=%d, rtx50=%d, rx9000=%d, intel=%d, intel_arc=%d)", best, g_vk.props.deviceName,
+           g_vk.gpu_is_nvidia, g_vk.gpu_is_rtx40_plus, g_vk.gpu_is_rtx50, g_vk.gpu_is_rx9000, g_vk.gpu_is_intel, g_vk.gpu_is_intel_arc);
     vk_mem_class_log(&g_vk.props, &g_vk.mem_props);
     return 1;
 }
@@ -434,6 +440,8 @@ int vk_gpu_is_nvidia(void) { return g_ready && g_vk.gpu_is_nvidia; }
 int vk_gpu_is_rtx40_plus(void) { return g_ready && g_vk.gpu_is_rtx40_plus; }
 int vk_gpu_is_rtx50(void) { return g_ready && g_vk.gpu_is_rtx50; }
 int vk_gpu_is_rx9000(void) { return g_ready && g_vk.gpu_is_rx9000; }
+int vk_gpu_is_intel(void) { return g_ready && g_vk.gpu_is_intel; }
+int vk_gpu_is_intel_arc(void) { return g_ready && g_vk.gpu_is_intel_arc; }
 int vk_has_amd_antilag(void) { return g_ready && g_vk.has_amd_antilag; }
 
 static const char *fault_address_type(VkDeviceFaultAddressTypeEXT t) {

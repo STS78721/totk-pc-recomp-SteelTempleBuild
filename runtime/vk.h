@@ -42,7 +42,9 @@ typedef struct VkCtx {
         gpu_is_nvidia,                      // vendorID == 0x10de
         gpu_is_rtx40_plus,                  // NVIDIA RTX 40 / 50 series (DLSS Frame Generation)
         gpu_is_rtx50,                       // NVIDIA RTX 50 series Blackwell (Multi-Frame Generation 4x / 6x)
-        gpu_is_rx9000;                      // AMD Radeon RX 9000 series RDNA 4 (FSR 4 AI Frame Generation)
+        gpu_is_rx9000,                      // AMD Radeon RX 9000 series RDNA 4 (FSR 4 AI Frame Generation)
+        gpu_is_intel,                       // vendorID == 0x8086 (Intel Graphics)
+        gpu_is_intel_arc;                   // Intel Arc A-Series / B-Series (XeSS XMX & XeFG Frame Generation)
     // Feedback loops (maxwell.md 1.9, vk_exec_draw.c feedback_prepare): a draw samples a target of its open pass that
     // an earlier draw of the pass wrote. TOTK_FEEDBACK=0: VK_FEEDBACK_OFF (sampled in GENERAL without a barrier, the
     // old behaviour); VK_FEEDBACK_LAYOUT with VK_EXT_attachment_feedback_loop_layout and dynamicRenderingLocalRead
@@ -159,6 +161,8 @@ int vk_gpu_is_nvidia(void);
 int vk_gpu_is_rtx40_plus(void);
 int vk_gpu_is_rtx50(void);
 int vk_gpu_is_rx9000(void);
+int vk_gpu_is_intel(void);
+int vk_gpu_is_intel_arc(void);
 int vk_has_amd_antilag(void);
 int vk_fg_active_multiplier(void);
 void vk_fsr_release(void);   // before the device goes away
