@@ -88,7 +88,7 @@ int input_pad_layout_pick(const char *setting, int east_labelled_a);
 // Button prompts (TOTK_PROMPTS): the controller whose buttons the game's prompts show. Nintendo: the game's own. Xbox:
 // LB RB LT RT, Menu, View and a d-pad cross for the other buttons, and the face buttons named by the label of the
 // button the pad layout presses (runtime/romfs.c overlay_init, tools/make_romfs_patches.py --prompts).
-enum { PROMPTS_NINTENDO, PROMPTS_XBOX };
+enum { PROMPTS_NINTENDO, PROMPTS_XBOX, PROMPTS_DUALSENSE, PROMPTS_DUALSHOCK4 };
 // The prompts for a TOTK_PROMPTS value ("nintendo" or "xbox", any case). Unset or empty: Xbox while the pad layout
 // setting is "xbox_prompts", else Nintendo.
 int input_prompts_pick(const char *prompts, const char *pad_layout);

@@ -175,7 +175,7 @@ static const CfgMeta metas[] = {
     {"DUALSENSE_VOL", "100", "0..150", LIVE},
     {"DUALSENSE_HAPTICS", "1", "0|1", LIVE},
     {"PAD_LAYOUT", "auto", "auto|nintendo|xbox", LIVE},
-    {"PROMPTS", "nintendo", "nintendo|xbox", RESTART},
+    {"PROMPTS", "nintendo", "nintendo|xbox|dualsense|dualshock4", RESTART},
     {"STICK_DEADZONE", "8", "0..50", LIVE}, {"STICK_SENS", "1", "0.1..3", RESTART},
     {"LSTICK_DEADZONE", "", "0..50", LIVE}, {"RSTICK_DEADZONE", "", "0..50", LIVE},
     {"MOUSE_SENS", "1", "0..10", LIVE},

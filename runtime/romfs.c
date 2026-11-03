@@ -750,14 +750,14 @@ static void camera_overlay(void) {
 // The button prompts' folders (input_prompts_folder) and whether each had a manifest next to romfs-index.bin at start;
 // the one the settings asked for at start, the one overlay_init loaded (NULL: the game's own prompts) and why the first
 // did not load (ROMFS_PROMPTS_*). The menu compares them with the settings in effect (ui/menu.cpp prompts_note).
-static struct { const char *name; int ready; } prompts_folders[2];
+static struct { const char *name; int ready; } prompts_folders[4];
 static const char *prompts_wanted, *prompts_loaded;
 static int prompts_off;
 
 const char *romfs_prompts(void) { return prompts_loaded; }
 
 int romfs_prompts_ready(const char *folder) {
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < 4; i++)
         if (folder && prompts_folders[i].name && !strcmp(prompts_folders[i].name, folder)) return prompts_folders[i].ready;
     return 0;
 }
@@ -813,9 +813,14 @@ static void overlay_init(void) {
                    "(tools/make_romfs_patches.py --aspect %ux%u)", out[0], out[1], out[0], out[1]);
         }
     }
-    static const char *const layouts[2] = {"nintendo", "xbox"};   // one of each folder
-    for (int i = 0; i < 2; i++) {
-        prompts_folders[i].name = input_prompts_folder(PROMPTS_XBOX, layouts[i]);
+    static const char *const pnames[4] = {
+        "romfs-patches-xbox",
+        "romfs-patches-xbox-label",
+        "romfs-patches-dualsense",
+        "romfs-patches-dualshock4"
+    };
+    for (int i = 0; i < 4; i++) {
+        prompts_folders[i].name = pnames[i];
         prompts_folders[i].ready =
             snprintf(path, sizeof path, "%s/%s/manifest.tsv", index_dir, prompts_folders[i].name) < (int)sizeof path &&
             plat_file_exists(path);
@@ -833,7 +838,7 @@ static void overlay_init(void) {
         snprintf(path, sizeof path, "%s/%s", index_dir, prompts_wanted);   // fits: its manifest path did
         if (overlay_load(path, 1, 0)) {
             prompts_loaded = prompts_wanted;
-            rt_log("RomFS overlay: Xbox button prompts (%s)", path);
+            rt_log("RomFS overlay: button prompts (%s)", path);
         } else {
             prompts_off = ROMFS_PROMPTS_FAILED;
             rt_log("RomFS overlay: %s failed its check (run the setup again); romfs-patches loads instead", path);

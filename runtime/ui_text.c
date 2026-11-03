@@ -292,7 +292,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                              "prompts for A show B). The game reads its prompts at start, so they change after a "
                              "restart. They are part of the game's files, so a button you remap in Controls keeps its "
                              "old prompt on screen.",
-    [UI_MENU_PROMPTS_NINTENDO] = "Nintendo", [UI_MENU_PROMPTS_XBOX] = "Xbox",
+    [UI_MENU_PROMPTS_NINTENDO] = "Nintendo", [UI_MENU_PROMPTS_XBOX] = "Xbox (One / Series)",
+    [UI_MENU_PROMPTS_DUALSENSE] = "PlayStation 5 (DualSense)", [UI_MENU_PROMPTS_DUALSHOCK4] = "PlayStation 4 (DualShock)",
     [UI_MENU_PROMPTS_MISSING] = "prompt files missing: run the setup again",
     [UI_MENU_PROMPTS_FAILED] = "prompt files damaged: run the setup again",
     [UI_MENU_PROMPTS_RESTART] = "prompts change after restart",
@@ -718,7 +719,8 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                              "подсказки A показывают B). Игра читает подсказки при запуске, так что они меняются после "
                              "перезапуска. Подсказки записаны в файлах игры, поэтому у кнопки, переназначенной на "
                              "вкладке управления, на экране остаётся прежняя подсказка.",
-    [UI_MENU_PROMPTS_NINTENDO] = "Nintendo", [UI_MENU_PROMPTS_XBOX] = "Xbox",
+    [UI_MENU_PROMPTS_NINTENDO] = "Nintendo", [UI_MENU_PROMPTS_XBOX] = "Xbox (One / Series)",
+    [UI_MENU_PROMPTS_DUALSENSE] = "PlayStation 5 (DualSense)", [UI_MENU_PROMPTS_DUALSHOCK4] = "PlayStation 4 (DualShock)",
     [UI_MENU_PROMPTS_MISSING] = "нет файлов подсказок: запустите установку снова",
     [UI_MENU_PROMPTS_FAILED] = "файлы подсказок повреждены: запустите установку снова",
     [UI_MENU_PROMPTS_RESTART] = "подсказки сменятся после перезапуска",
@@ -1333,7 +1335,9 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
                              "mudam depois de reiniciar. Eles fazem parte dos arquivos do jogo, então um botão "
                              "remapeado em Controles continua com o ícone antigo na tela.",
     [UI_MENU_PROMPTS_NINTENDO] = "Nintendo",
-    [UI_MENU_PROMPTS_XBOX] = "Xbox",
+    [UI_MENU_PROMPTS_XBOX] = "Xbox (One / Series)",
+    [UI_MENU_PROMPTS_DUALSENSE] = "PlayStation 5 (DualSense)",
+    [UI_MENU_PROMPTS_DUALSHOCK4] = "PlayStation 4 (DualShock)",
     [UI_MENU_PROMPTS_MISSING] = "faltam os arquivos dos ícones: execute a instalação de novo",
     [UI_MENU_PROMPTS_FAILED] = "arquivos dos ícones danificados: execute a instalação de novo",
     [UI_MENU_PROMPTS_RESTART] = "os ícones mudam após reiniciar",
@@ -1908,7 +1912,9 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
                              "A、B、X、Y（使用 Nintendo（A 在右）时右侧按键标为 B，因此 A 的提示显示 "
                              "B）。游戏在启动时读取按键提示，因此重启后才会改变。提示属于游戏文件，在“操作”中重新映射的按键在屏幕上仍显示原来的提示。",
     [UI_MENU_PROMPTS_NINTENDO] = "Nintendo",
-    [UI_MENU_PROMPTS_XBOX] = "Xbox",
+    [UI_MENU_PROMPTS_XBOX] = "Xbox (One / Series)",
+    [UI_MENU_PROMPTS_DUALSENSE] = "PlayStation 5 (DualSense)",
+    [UI_MENU_PROMPTS_DUALSHOCK4] = "PlayStation 4 (DualShock)",
     [UI_MENU_PROMPTS_MISSING] = "缺少按键提示文件：请重新运行安装程序",
     [UI_MENU_PROMPTS_FAILED] = "按键提示文件已损坏：请重新运行安装程序",
     [UI_MENU_PROMPTS_RESTART] = "按键提示重启后生效",
