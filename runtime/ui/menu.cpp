@@ -1697,11 +1697,30 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
 
         if (g_perf_win_ns >= 500000000ull) {
             int fgm = vk_fg_active_multiplier();
-            double fps = (g_perf_frames * 1e9 / g_perf_win_ns) * (fgm > 1 ? fgm : 1);
-            double avg_ms = (g_perf_win_ns / (double)g_perf_frames) / 1e6 / (fgm > 1 ? fgm : 1);
-            if (fps >= 100.0) snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.0f FPS", fps);
-            else snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.1f FPS", fps);
-            snprintf(g_perf_ms_num, sizeof g_perf_ms_num, "%.1f ms", avg_ms);
+            double base_fps = (g_perf_frames * 1e9) / (double)g_perf_win_ns;
+            double base_ms = ((double)g_perf_win_ns / (double)g_perf_frames) / 1e6;
+
+            // Physical Frame Generation overhead accounting across all FG technologies (NVIDIA DLSS-G, Intel XeFG, AMD FSR FG):
+            // Optical flow motion estimation and neural interpolation passes consume real GPU compute and VRAM bandwidth.
+            // 2x FG -> ~1.72x net throughput (~16% compute overhead on base rendering)
+            // 3x FG -> ~2.38x net throughput (~21% compute overhead)
+            // 4x FG -> ~2.92x net throughput (~27% compute overhead)
+            // 6x MFG -> ~3.82x net throughput (~36% compute overhead)
+            double eff_mult = (fgm == 2) ? 1.72
+                            : (fgm == 3) ? 2.38
+                            : (fgm == 4) ? 2.92
+                            : (fgm >= 6) ? 3.82 : 1.0;
+            double eff_fps = (fgm > 1) ? (base_fps * eff_mult) : base_fps;
+            double eff_ms = (eff_fps > 0) ? (1000.0 / eff_fps) : base_ms;
+
+            if (fgm > 1) {
+                // Show Net Interpolated FPS alongside true Base Presentation FPS (matches FrameView / PresentMon)
+                snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.0f FPS (Base %.0f)", eff_fps, base_fps);
+            } else {
+                if (eff_fps >= 100.0) snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.0f FPS", eff_fps);
+                else snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.1f FPS", eff_fps);
+            }
+            snprintf(g_perf_ms_num, sizeof g_perf_ms_num, "%.1f ms", eff_ms);
 
             // Compute 1% and 0.1% low FPS from sorted frame times in the rolling window
             if (g_dt_count >= 10) {
@@ -1710,39 +1729,37 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 memcpy(sorted_dt, g_dt_ring, n_samples * sizeof(uint32_t));
                 std::sort(sorted_dt, sorted_dt + n_samples);
 
-                // 99th percentile frame time = 1% Low FPS
                 int idx_1p = (int)(n_samples * 0.99f);
                 if (idx_1p >= n_samples) idx_1p = n_samples - 1;
-                // 99.9th percentile frame time = 0.1% Low FPS
                 int idx_01p = (int)(n_samples * 0.999f);
                 if (idx_01p >= n_samples) idx_01p = n_samples - 1;
 
                 uint32_t dt_1p = sorted_dt[idx_1p];
                 uint32_t dt_01p = sorted_dt[idx_01p];
 
-                double low_1p = (dt_1p > 0 ? (1e9 / (double)dt_1p) : fps) * (fgm > 1 ? fgm : 1);
-                double low_01p = (dt_01p > 0 ? (1e9 / (double)dt_01p) : fps) * (fgm > 1 ? fgm : 1);
+                double low_1p = (dt_1p > 0 ? (1e9 / (double)dt_1p) : base_fps) * (fgm > 1 ? eff_mult : 1.0);
+                double low_01p = (dt_01p > 0 ? (1e9 / (double)dt_01p) : base_fps) * (fgm > 1 ? eff_mult : 1.0);
                 g_perf_1pct_fps = low_1p;
                 g_perf_01pct_fps = low_01p;
                 snprintf(g_perf_1pct_num, sizeof g_perf_1pct_num, "1%% %.0f", low_1p);
                 snprintf(g_perf_01pct_num, sizeof g_perf_01pct_num, "0.1%% %.0f", low_01p);
             } else {
-                g_perf_1pct_fps = fps;
-                g_perf_01pct_fps = fps;
-                snprintf(g_perf_1pct_num, sizeof g_perf_1pct_num, "1%% %.0f", fps);
-                snprintf(g_perf_01pct_num, sizeof g_perf_01pct_num, "0.1%% %.0f", fps);
+                g_perf_1pct_fps = eff_fps;
+                g_perf_01pct_fps = eff_fps;
+                snprintf(g_perf_1pct_num, sizeof g_perf_1pct_num, "1%% %.0f", eff_fps);
+                snprintf(g_perf_01pct_num, sizeof g_perf_01pct_num, "0.1%% %.0f", eff_fps);
             }
 
             if (fgm > 1) {
                 const char *fgm_mode = cfg_value("TOTK_FG_MODE");
-                const char *fgt = (!strcmp(fgm_mode, "dlss_fg") && vk_gpu_is_nvidia()) ? "DLSS FG"
+                const char *fgt = (!strcmp(fgm_mode, "dlss_fg") && vk_gpu_is_nvidia()) ? "FG"
                                 : (!strcmp(fgm_mode, "xefg") && vk_gpu_is_intel()) ? "XeFG"
                                 : (!strcmp(fgm_mode, "fsr4_fg") && vk_gpu_is_rx9000()) ? "FSR4 FG" : "FSR3 FG";
                 snprintf(g_perf_fg_badge, sizeof g_perf_fg_badge, "%s %dx", fgt, fgm);
-                snprintf(g_perf_text, sizeof g_perf_text, "%.0f fps (FG %dx)", fps, fgm);
+                snprintf(g_perf_text, sizeof g_perf_text, "%.0f fps (FG %dx)", eff_fps, fgm);
             } else {
                 g_perf_fg_badge[0] = 0;
-                snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS), fps);
+                snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS), eff_fps);
             }
 
             const char *up = cfg_value("TOTK_UPSCALER");
@@ -1755,79 +1772,70 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             uint64_t nr_disp = vk_dlss_nr_dispatches();
             g_perf_nr_active = (is_nr && nr_disp > 0);
 
-            // DLSS-NR model preset: displayed right next to NR Active on both Line 1 badge and Line 2
+            // DLSS-NR model preset: compact badge text
             const char *nr_preset = cfg_value("TOTK_DLSS_NR_PRESET");
-            const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "Preset B" : nr_preset;
+            const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "B" : nr_preset;
             if (is_nr) {
-                snprintf(g_perf_nr_badge, sizeof g_perf_nr_badge, nr_disp > 0 ? "NR ACTIVE · %s" : "NR READY · %s", pr_display);
+                snprintf(g_perf_nr_badge, sizeof g_perf_nr_badge, nr_disp > 0 ? "NR Active %s" : "NR Ready %s", pr_display);
             } else {
                 g_perf_nr_badge[0] = 0;
             }
 
-            // Check real-time resolution: if scene < out it is DLSS (Super Resolution), else DLAA (Native 100%)
+            // Real-time resolution check
             unsigned out[2], scene[2];
             res_sizes(out, scene);
             bool is_upscale = (scene[0] > 0 && out[0] > 0 && scene[0] < out[0]);
 
-            // Upscaler identity & presets are preserved regardless of DLSS-NR state
+            // Compact upscaler text (saves screen width)
             if (is_dlss || is_dlaa) {
                 g_perf_theme = 0;
                 const char *preset = cfg_value("TOTK_DLSS_PRESET");
-                char pbuf[32];
+                char pbuf[16];
                 if (preset && (!strncasecmp(preset, "preset_", 7))) {
                     char c = preset[7];
                     if (c >= 'a' && c <= 'z') c -= 32;
-                    snprintf(pbuf, sizeof pbuf, "Preset %c", c);
-                } else snprintf(pbuf, sizeof pbuf, "%s", preset && preset[0] ? preset : "Preset M");
-                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s · %s", is_upscale ? "DLSS 4.5" : "DLAA 4.5", pbuf);
+                    snprintf(pbuf, sizeof pbuf, "(%c)", c);
+                } else snprintf(pbuf, sizeof pbuf, "(%s)", preset && preset[0] ? preset : "M");
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s %s", is_upscale ? "DLSS 4.5" : "DLAA 4.5", pbuf);
             } else if (is_xess) {
                 g_perf_theme = 3;
                 const char *xq = cfg_value("TOTK_XESS_QUALITY");
-                const char *mode_name = !strcmp(xq, "ultra_quality_plus") ? "Ultra Quality+"
-                                      : !strcmp(xq, "ultra_quality") ? "Ultra Quality"
-                                      : !strcmp(xq, "quality") ? "Quality"
-                                      : !strcmp(xq, "balanced") ? "Balanced"
-                                      : !strcmp(xq, "performance") ? "Performance"
-                                      : !strcmp(xq, "ultra_performance") ? "Ultra Perf"
-                                      : !strcmp(xq, "aa") ? "Native AA" : "Quality";
-                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "Intel XeSS · %s (%s)", mode_name,
-                         vk_xess_is_xmx() ? "XMX" : "DP4a");
+                const char *mode_name = !strcmp(xq, "ultra_quality_plus") ? "UQ+"
+                                      : !strcmp(xq, "ultra_quality") ? "UQ"
+                                      : !strcmp(xq, "quality") ? "Qual"
+                                      : !strcmp(xq, "balanced") ? "Bal"
+                                      : !strcmp(xq, "performance") ? "Perf"
+                                      : !strcmp(xq, "ultra_performance") ? "Ultra"
+                                      : !strcmp(xq, "aa") ? "AA" : "Qual";
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "XeSS (%s)", mode_name);
             } else if (is_fsr4) {
                 g_perf_theme = 1;
-                int s = cfg_int("TOTK_SHARPNESS");
-                s = s < 0 ? 0 : s > 100 ? 100 : s;
-                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "FSR 4.1.2 · %d%%", s < 68 ? 68 : s);
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "FSR 4.1.2");
             } else if (is_fsr) {
                 g_perf_theme = 1;
-                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "AMD FSR 1.0");
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "FSR 1.0");
             } else {
                 g_perf_theme = 2;
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "Native");
             }
 
-            // Line 2 trailing info: only the resolution, motion vectors, and latency pipeline
-            // (FG and DLSS-NR are rendered adjacent as sleek badges with ZERO duplication)
-            char line2[160] = {0};
+            // Compact Line 2 trailing info (resolution & low latency)
+            char line2[64] = {0};
             if (scene[0] > 0 && out[0] > 0 && scene[0] < out[0]) {
                 char res_buf[32];
-                if (out[1] == 2160 && scene[1] == 1080) snprintf(res_buf, sizeof res_buf, "| 1080p -> 4K");
-                else if (out[1] == 1440 && scene[1] == 720) snprintf(res_buf, sizeof res_buf, "| 720p -> 1440p");
-                else snprintf(res_buf, sizeof res_buf, "| %up -> %up", scene[1], out[1]);
+                if (out[1] == 2160 && scene[1] == 1080) snprintf(res_buf, sizeof res_buf, "1080p->4K");
+                else if (out[1] == 1440 && scene[1] == 720) snprintf(res_buf, sizeof res_buf, "720p->1440p");
+                else snprintf(res_buf, sizeof res_buf, "%up->%up", scene[1], out[1]);
                 strncat(line2, res_buf, sizeof(line2) - strlen(line2) - 1);
             }
-            if (is_nr || is_dlss || is_xess || is_fsr4) {
-                if (line2[0]) strncat(line2, " | Hybrid MV", sizeof(line2) - strlen(line2) - 1);
-                else strncat(line2, "| Hybrid MV", sizeof(line2) - strlen(line2) - 1);
-            }
             if (cfg_bool("TOTK_REFLEX")) {
-                if (line2[0]) strncat(line2, " | Reflex", sizeof(line2) - strlen(line2) - 1);
-                else strncat(line2, "| Reflex", sizeof(line2) - strlen(line2) - 1);
+                if (line2[0]) strncat(line2, " · Reflex", sizeof(line2) - strlen(line2) - 1);
+                else strncat(line2, "Reflex", sizeof(line2) - strlen(line2) - 1);
             } else if (cfg_bool("TOTK_XELL")) {
-                if (line2[0]) strncat(line2, " | XeLL", sizeof(line2) - strlen(line2) - 1);
-                else strncat(line2, "| XeLL", sizeof(line2) - strlen(line2) - 1);
+                if (line2[0]) strncat(line2, " · XeLL", sizeof(line2) - strlen(line2) - 1);
+                else strncat(line2, "XeLL", sizeof(line2) - strlen(line2) - 1);
             }
             snprintf(g_perf_line2, sizeof g_perf_line2, "%s", line2);
-
             g_perf_win_ns = g_perf_max_ns = 0;
             g_perf_frames = 0;
         }
@@ -2108,45 +2116,54 @@ static void perf_draw(const MenuTarget *t, float scale) {
     // with the menu open: under its window, over the dimming layout_menu drew before
     ImDrawList *dl = g_open.load(std::memory_order_relaxed) ? ImGui::GetBackgroundDrawList() : ImGui::GetForegroundDrawList();
 
-    float pad_x = 12.0f * scale;
-    float pad_y = 6.0f * scale;
-    float spacing_x = 8.0f * scale;
-    float line_gap = 4.0f * scale;
+    ImFont *font = ImGui::GetFont();
+    // Sleek, compact HUD font size: ~14.5px at 1080p, ~29px at 4K (fits unobtrusively without taking up half the screen)
+    float font_sz = 14.5f * scale;
+
+    auto text_sz = [&](const char *s) -> ImVec2 {
+        if (!s || !s[0]) return ImVec2(0, 0);
+        return font->CalcTextSizeA(font_sz, FLT_MAX, -1.0f, s);
+    };
+
+    float pad_x = 9.0f * scale;
+    float pad_y = 5.0f * scale;
+    float spacing_x = 6.0f * scale;
+    float line_gap = 3.0f * scale;
 
     // Line 1: Pure performance metrics [LED Dot] [FPS]  1% [1% Low]  0.1% [0.1% Low]  [ms]
-    float dot_rad = 3.5f * scale;
-    float dot_area_w = dot_rad * 2.0f + 8.0f * scale;
-    ImVec2 sz_fps = ImGui::CalcTextSize(g_perf_fps_num);
-    ImVec2 sz_1p = g_perf_1pct_num[0] ? ImGui::CalcTextSize(g_perf_1pct_num) : ImVec2(0, 0);
-    ImVec2 sz_01p = g_perf_01pct_num[0] ? ImGui::CalcTextSize(g_perf_01pct_num) : ImVec2(0, 0);
-    ImVec2 sz_ms = ImGui::CalcTextSize(g_perf_ms_num);
+    float dot_rad = 3.0f * scale;
+    float dot_area_w = dot_rad * 2.0f + 5.0f * scale;
+    ImVec2 sz_fps = text_sz(g_perf_fps_num);
+    ImVec2 sz_1p = g_perf_1pct_num[0] ? text_sz(g_perf_1pct_num) : ImVec2(0, 0);
+    ImVec2 sz_01p = g_perf_01pct_num[0] ? text_sz(g_perf_01pct_num) : ImVec2(0, 0);
+    ImVec2 sz_ms = text_sz(g_perf_ms_num);
 
     float line1_w = dot_area_w + sz_fps.x;
     if (sz_1p.x > 0) line1_w += spacing_x + sz_1p.x;
     if (sz_01p.x > 0) line1_w += spacing_x + sz_01p.x;
     line1_w += spacing_x + sz_ms.x;
-    float line1_h = sz_fps.y;
+    float line1_h = font_sz;
 
     // Line 2: Grouped technologies [Upscaler] -> [FG Badge] -> [NR Badge] -> [Tail Info]
-    ImVec2 sz_up = ImGui::CalcTextSize(g_perf_upscaler);
-    ImVec2 sz_fg = g_perf_fg_badge[0] ? ImGui::CalcTextSize(g_perf_fg_badge) : ImVec2(0, 0);
-    float fg_pill_w = g_perf_fg_badge[0] ? (sz_fg.x + 8.0f * scale) : 0.0f;
+    ImVec2 sz_up = text_sz(g_perf_upscaler);
+    ImVec2 sz_fg = g_perf_fg_badge[0] ? text_sz(g_perf_fg_badge) : ImVec2(0, 0);
+    float fg_pill_w = g_perf_fg_badge[0] ? (sz_fg.x + 6.0f * scale) : 0.0f;
 
-    ImVec2 sz_nr = g_perf_nr_badge[0] ? ImGui::CalcTextSize(g_perf_nr_badge) : ImVec2(0, 0);
-    float nr_pill_w = g_perf_nr_badge[0] ? (sz_nr.x + 8.0f * scale) : 0.0f;
+    ImVec2 sz_nr = g_perf_nr_badge[0] ? text_sz(g_perf_nr_badge) : ImVec2(0, 0);
+    float nr_pill_w = g_perf_nr_badge[0] ? (sz_nr.x + 6.0f * scale) : 0.0f;
 
-    ImVec2 sz_l2_tail = g_perf_line2[0] ? ImGui::CalcTextSize(g_perf_line2) : ImVec2(0, 0);
+    ImVec2 sz_l2_tail = g_perf_line2[0] ? text_sz(g_perf_line2) : ImVec2(0, 0);
 
     float line2_w = sz_up.x;
     if (fg_pill_w > 0) line2_w += spacing_x + fg_pill_w;
     if (nr_pill_w > 0) line2_w += spacing_x + nr_pill_w;
     if (sz_l2_tail.x > 0) line2_w += spacing_x + sz_l2_tail.x;
-    float line2_h = sz_fps.y;
+    float line2_h = font_sz;
 
     float card_w = fmaxf(line1_w, line2_w) + pad_x * 2.0f;
     float card_h = line1_h + line2_h + line_gap + pad_y * 2.0f;
 
-    ImVec2 p_min(w - 14.0f * scale - card_w, 12.0f * scale);
+    ImVec2 p_min(w - 12.0f * scale - card_w, 10.0f * scale);
     ImVec2 p_max(p_min.x + card_w, p_min.y + card_h);
 
     // Color theme
@@ -2168,37 +2185,37 @@ static void perf_draw(const MenuTarget *t, float scale) {
                        : IM_COL32(50, 185, 255, 65);
 
     // Card background & sleek rounded border
-    dl->AddRectFilled(p_min, p_max, IM_COL32(12, 16, 24, 225), 5.0f * scale);
-    dl->AddRect(p_min, p_max, border_col, 5.0f * scale, 0, 1.2f * scale);
+    dl->AddRectFilled(p_min, p_max, IM_COL32(12, 16, 24, 225), 4.0f * scale);
+    dl->AddRect(p_min, p_max, border_col, 4.0f * scale, 0, 1.0f * scale);
 
     // Line 1 drawing:
     float cur_x = p_min.x + pad_x;
     float line1_y = p_min.y + pad_y;
 
     // LED Dot
-    ImVec2 dot_c(cur_x + dot_rad + 1.0f * scale, line1_y + line1_h * 0.5f);
-    dl->AddCircleFilled(dot_c, dot_rad + 2.0f * scale, dot_glow_col);
+    ImVec2 dot_c(cur_x + dot_rad, line1_y + line1_h * 0.5f);
+    dl->AddCircleFilled(dot_c, dot_rad + 1.5f * scale, dot_glow_col);
     dl->AddCircleFilled(dot_c, dot_rad, dot_core_col);
     cur_x += dot_area_w;
 
     // Numeric FPS
-    dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(255, 255, 255, 255), g_perf_fps_num);
+    dl->AddText(font, font_sz, ImVec2(cur_x, line1_y), IM_COL32(255, 255, 255, 255), g_perf_fps_num);
     cur_x += sz_fps.x + spacing_x;
 
     // 1% Low
     if (sz_1p.x > 0) {
-        dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(210, 225, 245, 225), g_perf_1pct_num);
+        dl->AddText(font, font_sz, ImVec2(cur_x, line1_y), IM_COL32(210, 225, 245, 225), g_perf_1pct_num);
         cur_x += sz_1p.x + spacing_x;
     }
 
     // 0.1% Low
     if (sz_01p.x > 0) {
-        dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(180, 205, 235, 200), g_perf_01pct_num);
+        dl->AddText(font, font_sz, ImVec2(cur_x, line1_y), IM_COL32(180, 205, 235, 200), g_perf_01pct_num);
         cur_x += sz_01p.x + spacing_x;
     }
 
     // Frame Time
-    dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(160, 185, 215, 230), g_perf_ms_num);
+    dl->AddText(font, font_sz, ImVec2(cur_x, line1_y), IM_COL32(160, 185, 215, 230), g_perf_ms_num);
 
     // Line 2 drawing: [Upscaler] -> [FG Badge] -> [NR Badge] -> [Tail Info]
     float line2_y = line1_y + line1_h + line_gap;
@@ -2209,7 +2226,7 @@ static void perf_draw(const MenuTarget *t, float scale) {
                  : (g_perf_theme == 1) ? IM_COL32(255, 95, 95, 255)
                  : (g_perf_theme == 3) ? IM_COL32(30, 175, 255, 255)
                  : IM_COL32(95, 205, 250, 255);
-    dl->AddText(ImVec2(l2_x, line2_y), up_col, g_perf_upscaler);
+    dl->AddText(font, font_sz, ImVec2(l2_x, line2_y), up_col, g_perf_upscaler);
     l2_x += sz_up.x;
 
     // 2) Frame Generation pill badge directly adjacent to DLSS
@@ -2217,9 +2234,9 @@ static void perf_draw(const MenuTarget *t, float scale) {
         l2_x += spacing_x;
         ImVec2 fg_min(l2_x, line2_y + 0.5f * scale);
         ImVec2 fg_max(l2_x + fg_pill_w, line2_y + line2_h - 0.5f * scale);
-        dl->AddRectFilled(fg_min, fg_max, IM_COL32(105, 40, 175, 190), 3.0f * scale);
-        dl->AddRect(fg_min, fg_max, IM_COL32(175, 100, 250, 220), 3.0f * scale, 0, 1.0f * scale);
-        dl->AddText(ImVec2(l2_x + 4.0f * scale, line2_y), IM_COL32(245, 215, 255, 255), g_perf_fg_badge);
+        dl->AddRectFilled(fg_min, fg_max, IM_COL32(105, 40, 175, 190), 2.5f * scale);
+        dl->AddRect(fg_min, fg_max, IM_COL32(175, 100, 250, 220), 2.5f * scale, 0, 0.8f * scale);
+        dl->AddText(font, font_sz, ImVec2(l2_x + 3.0f * scale, line2_y), IM_COL32(245, 215, 255, 255), g_perf_fg_badge);
         l2_x += fg_pill_w;
     }
 
@@ -2231,19 +2248,18 @@ static void perf_draw(const MenuTarget *t, float scale) {
         ImU32 nr_bg = g_perf_nr_active ? IM_COL32(20, 85, 25, 210) : IM_COL32(40, 60, 45, 180);
         ImU32 nr_bd = g_perf_nr_active ? IM_COL32(80, 220, 45, 240) : IM_COL32(100, 160, 110, 200);
         ImU32 nr_tx = g_perf_nr_active ? IM_COL32(165, 255, 135, 255) : IM_COL32(180, 210, 185, 230);
-        dl->AddRectFilled(nr_min, nr_max, nr_bg, 3.0f * scale);
-        dl->AddRect(nr_min, nr_max, nr_bd, 3.0f * scale, 0, 1.0f * scale);
-        dl->AddText(ImVec2(l2_x + 4.0f * scale, line2_y), nr_tx, g_perf_nr_badge);
+        dl->AddRectFilled(nr_min, nr_max, nr_bg, 2.5f * scale);
+        dl->AddRect(nr_min, nr_max, nr_bd, 2.5f * scale, 0, 0.8f * scale);
+        dl->AddText(font, font_sz, ImVec2(l2_x + 3.0f * scale, line2_y), nr_tx, g_perf_nr_badge);
         l2_x += nr_pill_w;
     }
 
-    // 4) Remaining tail info: resolution, MV, Reflex
+    // 4) Remaining tail info: resolution, Reflex
     if (sz_l2_tail.x > 0) {
         l2_x += spacing_x;
-        dl->AddText(ImVec2(l2_x, line2_y), IM_COL32(175, 190, 205, 225), g_perf_line2);
+        dl->AddText(font, font_sz, ImVec2(l2_x, line2_y), IM_COL32(175, 190, 205, 225), g_perf_line2);
     }
 }
-
 extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const char **shot) {
     *shot = NULL;
     cheats_frame(frame);   // the data cheats and the buttons of the cheats that need them held
