@@ -3222,14 +3222,19 @@ void vk_pipeline_save(void) {
 }
 
 // The game never shuts the device down (boot.c and the window end the process), so the cache is saved while it
-// runs: at most every 20 s, and only after new pipelines were built. New pipeline keys are appended every 2 s.
+// runs: by default every 180 s (TOTK_PIPE_AUTOSAVE_SEC) to prevent periodic disk stutter, and only after new pipelines were built.
 static void autosave_once(void) {
     static uint64_t last_n, last_ms, last_keys;
     if (!P.ready) return;
     uint64_t now = plat_now_ms();
     if (*(volatile uint32_t *)&K.pend_n && now - last_keys >= 2000) last_keys = now, keys_flush();
     gfx_shader_record_flush(0);
-    if (now - last_ms < 20000) return;
+    static int save_interval_ms = -1;
+    if (save_interval_ms < 0) {
+        int sec = cfg_int("TOTK_PIPE_AUTOSAVE_SEC");
+        save_interval_ms = (sec > 0 ? sec : 180) * 1000;
+    }
+    if (now - last_ms < (uint64_t)save_interval_ms) return;
     VkPipeStats s;
     vk_pipeline_stats(&s);
     if (s.graphics + s.compute == last_n) return;
