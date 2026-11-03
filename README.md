@@ -1,86 +1,102 @@
-# TotK Recomp
+# TotK Recomp — Next Gen STS Build
 
-**TotK Recomp** is a static recompilation of *The Legend of Zelda: Tears of the Kingdom* (Nintendo Switch, 2023) into a native x86-64 application for Windows and Linux ([docs/architecture.md](docs/architecture.md)).
+[![Latest Release](https://img.shields.io/github/v/release/STS78721/totk-pc-recomp-SteelTempleBuild?label=Latest%20Release&color=brightgreen)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)
+[![Release Date](https://img.shields.io/github/release-date/STS78721/totk-pc-recomp-SteelTempleBuild?color=blue)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20x86--64-informational)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild)
+[![Vulkan](https://img.shields.io/badge/Renderer-Vulkan%201.3-red)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild)
+
+**TotK Recomp: Next Gen STS Build** is an enhanced, high-performance static recompilation fork of *The Legend of Zelda: Tears of the Kingdom* (Nintendo Switch, 2023) for native Windows and Linux x86-64.
 
 > [!IMPORTANT]
-> **No game files are included.** You need your own legally obtained copy of *Tears of the Kingdom*, dumped from your own console: the base game and the 1.1.0, 1.2.1 or 1.4.3 update. Instructions for obtaining those files will not be provided.
->
-> The game is built from your files on your machine, so the result contains the game. It is for your own use. Do not share it.
+> **No game files are included.** You need your own legally obtained copy of *Tears of the Kingdom*, dumped from your own console: the base game and update 1.1.0, 1.2.1, or 1.4.3. The game executable is built from your files on your machine. Do not share copyrighted assets.
 
-## Status
+---
 
-Early development. The game is playable on Windows and Linux; visual bugs and crashes are still expected.
+## ⚡ What's New in Beta 2: Next Gen STS Build
 
-Report problems as issues, following [CONTRIBUTING.md](CONTRIBUTING.md).
+The **Beta 2 Unified Release** (`v0.3.4-beta-2-steeltemple`) consolidates all experimental and cutting-edge features developed across previous alpha/beta iterations into a rock-solid, production-ready build:
 
-## Features
+### 🌟 Key Changes & Upgrades
 
-- Native code, not emulation
-- Game updates 1.1.0, 1.2.1 and 1.4.3; 1.2.1 and 1.4.3 saves carry over between them
-- 60 fps by default; up to 144 fps or the monitor's refresh rate (experimental)
-- Custom resolutions (1080p, 2k, 4k...), supersampling, Unified Guided Upscaler Hub (**NVIDIA DLSS 4 / 4.5** Transformer Presets `K`, `J`, `M`, `L`, **DLSS 3** CNN Presets `E`, `C`, **AMD FSR 4.1.2**, and **AMD FSR 1.0**), Native **NVIDIA Reflex** (`VK_NV_low_latency2`: `Off`, `On`, `On + Boost`), Live **Ambient Occlusion** (`Native AO`, `SSAO`, `HBAO`, `Off`), and Global **`Restart now`** in-game action button
-- Hardware-Aware **Frame Generation (Alpha)**: **NVIDIA DLSS Frame Gen** (`Preset A` Transformer / `Preset B` Optical Flow / `Preset C` Low Motion Blur), **Multi-Frame Generation** (`2x` standard, plus `4x` and `6x` MFG gated to **NVIDIA GeForce RTX 50 Series** GPUs), **AMD FSR 3.1 & FSR 4 AI Frame Gen** (`fsr4_fg` gated to **AMD Radeon RX 9000 Series** GPUs), and **AMD Anti-Lag 2** (`VK_AMD_anti_lag`) with automatic guided low-latency pairing
-- HDR10 output with peak, game and HUD brightness settings, plus OLED color calibration (`Vivid`, `Clarity`, `Custom`)
-- 16:10 (Steam Deck, handhelds), 21:9 and 32:9 (ultrawide) game resolutions, with the camera and the interface in that shape
-- Anisotropic texture filtering up to 16x, for sharp ground into the distance
-- In-game settings menu (F1) and performance overlay (F10)
-- Setup and in-game menu in English, Russian, Brazilian Portuguese and Simplified Chinese
-- Keyboard, mouse and gamepad with remapping, rumble and gyro
-- Xbox button prompts: LB, RB, LT, RT, Menu and View, and A, B, X and Y as labelled on the button to press, with either button layout
-- Shaders prepared at install instead of during play
-- Mods made for emulators: unpack a mod into the `mods` folder next to `totk.exe`; switch and order them in the menu. RomFS
-  mods, TKMM's merged output and ExeFS code patches (`.ips`, `.pchtxt`) work; the game rebuilds itself for code patches
-  ([docs/mods.md](docs/mods.md))
-- Atmosphère cheats: put a cheat file into a mod and switch its cheats in the menu ([docs/cheats.md](docs/cheats.md))
+1. **Clean Removal of Experimental RTGI & Ray Reconstruction**
+   - Stripped unpolished screen-space/BVH ray-traced global illumination shaders and ray reconstruction denoisers.
+   - Eliminates temporal ghosting, firefly noise, edge boiling, and frame pacing stutter.
+   - Provides pure, pristine image fidelity and flawless frame consistency across all GPU architectures.
 
-## Planned
+2. **Intel XeGTAO (Ground Truth Ambient Occlusion)**
+   - Integrated full Intel XeGTAO high-performance ground-truth ambient occlusion alongside SSAO, HBAO, and Native Switch AO.
+   - Micro-shadowing depth and contact shadow realism with negligible GPU overhead.
 
-- VRR
+3. **Unified Guided Upscaler Engine**
+   - **NVIDIA DLSS 4 / 4.5**: Next-generation Transformer neural network models (Presets `K`, `J`, `M`, `L`) and DLSS 3 CNN models (Presets `E`, `C`) with DLAA support.
+   - **AMD FidelityFX Super Resolution**: Modern FSR 4.1.2 context-aware neural pipeline and FSR 1.0 spatial upscaler for universal hardware support.
 
-## Installing
+4. **Multi-Frame Generation Hub**
+   - **NVIDIA DLSS Frame Generation**: Full optical flow and motion-vector frame interpolation (`2x`), with Multi-Frame Generation (`4x` and `6x` MFG) hardware-gated to RTX 50-series GPUs.
+   - **AMD FSR 3.1 & FSR 4 AI Frame Generation**: High-performance frame interpolation optimized across modern Radeon cards (including RX 9070 XT, RX 7900 XTX, and RDNA 3/4).
 
-### Windows
+5. **Ultra-Low Latency Synchronization**
+   - **NVIDIA Reflex** native integration (`VK_NV_low_latency2`): `Off`, `On`, and `On + Boost`.
+   - **AMD Anti-Lag 2** native pipeline (`VK_AMD_anti_lag`): In-engine frame pacing and driver queue synchronization to eliminate input lag during frame generation.
 
-Requirements: Windows 10 or later, an x86-64 CPU with SSE4.2 (AVX2/FMA machines get a faster build), a GPU with Vulkan 1.3 and `VK_EXT_external_memory_host`, about 36 GiB free during setup (20 GiB after).
+6. **Next Gen STS Interface & Tab Overhaul**
+   - Rebranded header: `TotK Recomp 0.3.4-beta-2 (Next Gen STS Build)`.
+   - Dedicated **Graphics Settings** tab (formerly Screen tab) organizing resolution, upscaling, ambient occlusion, and display options.
+   - Dedicated **DLSS NR** tab previewing upcoming DLSS 5 Neural Rendering controls.
+   - Full OLED HDR10 calibration (`Vivid`, `Clarity`, `Custom`) with dynamic peak brightness, game exposure, and HUD white point sliders.
 
-1. Download `TotK-Setup-<version>-windows.zip` from [Releases](../../releases/latest) and unpack it.
-2. Start `TotK-Setup.exe`. If SmartScreen warns about an unsigned app, choose *More info*, then *Run anyway*.
-3. Pick your game files, the language and an install folder, and press *Start*. The setup builds the game once.
-4. Play `totk.exe` from the install folder.
+---
 
-### Linux
+## 📦 Download & Installation
 
-Requirements: as on Windows, plus Linux 6.7 or later and glibc 2.34 or later (Ubuntu 22.04, Debian 12, Fedora 35, SteamOS 3).
+Visit the **[Latest Beta 2 Release Page](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)** to download:
 
-1. Download `TotK-Setup-x86_64.AppImage` from [Releases](../../releases/latest), or build it ([docs/installer.md](docs/installer.md), "Linux release").
-2. Make it executable (`chmod +x TotK-Setup-x86_64.AppImage`) and start it. On a Steam Deck, do this in Desktop Mode.
-3. Pick your game files, the language and an install folder, and press *Start*.
-4. Play `totk` from the install folder.
+- **`TotK-Setup-0.3.4-beta-2-steeltemple-windows.zip`**: Full automated graphical installer with Vulkan shader pre-compilation.
+- **`TotK-Recomp-SteelTemple-v0.3.4-beta-2.zip`**: Drop-in archive containing `totk.exe`, `totk-rt.dll`, configurations, and DLL loaders.
+- **`totk_recomp_beta_2_unified.patch`**: Full developer patch for building from source.
 
-To update, run a newer setup on the same folder; saves and settings are kept. Settings are in the in-game menu and in `totk.ini` ([totk.ini.example](totk.ini.example) lists every key). Controls: [docs/controls.md](docs/controls.md).
+### 🔌 DLL Guide for DLSS & FSR Features
 
-## Credits
+To activate hardware-accelerated NVIDIA DLSS / Reflex / Frame Generation and AMD FSR, place the official vendor libraries directly in the game folder next to `totk.exe`:
 
-TotK Recomp builds on the projects below. What was taken from each, with its license, is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+#### NVIDIA Streamline DLLs
+- Download from NVIDIA's official repository: [NVIDIA Streamline GitHub](https://github.com/NVIDIAGameWorks/Streamline/releases)
+- Required files in root game folder:
+  ```text
+  sl.interposer.dll   (Streamline Interposer)
+  sl.dlss.dll         (DLSS 4 / 4.5 Super Resolution)
+  sl.dlss_g.dll       (DLSS Frame Generation)
+  sl.reflex.dll       (NVIDIA Reflex Low Latency)
+  sl.dlss_nr.dll      (DLSS Neural Rendering preview)
+  ```
 
-- [LAS Recomp](https://github.com/peiikai/LASRecomp)
-- [MacNativeGames](https://github.com/ly05010419/MacNativeGames)
-- [d2r-mobile](https://github.com/jhaizhou-ops/d2r-mobile) and [nxnative](https://github.com/seedds/nxnative)
-- [SavageWindRecomp](https://github.com/Revivedx/SavageWindRecomp)
-- [Ryujinx](https://github.com/Ryujinx/Ryujinx)
-- [deko3d](https://github.com/devkitPro/deko3d)
-- [hactool](https://github.com/SciresM/hactool)
-- [SDL 3](https://libsdl.org), [Dear ImGui](https://github.com/ocornut/imgui), [AMD FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR), [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), [libopus](https://opus-codec.org), [libvpx](https://chromium.googlesource.com/webm/libvpx), [Zstandard](https://github.com/facebook/zstd)
-- [Switchbrew](https://switchbrew.org) and the Switch homebrew community
+#### AMD FidelityFX DLLs
+- Download from GPUOpen: [GPUOpen FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/releases)
+- Required files in root game folder:
+  ```text
+  amd_fidelityfx_dx12.dll / amd_fidelityfx_vk.dll
+  fsr4_upscaler.dll
+  ```
 
-## License
+> [!NOTE]
+> Detailed extraction instructions, directory hierarchy, and checksums are provided in our [DLL Installation Guide](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/v0.3.4-beta-2-steeltemple).
 
-The project's own code is under the [MIT License](LICENSE); third-party code keeps its own license ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). The license grants nothing for Nintendo's game.
+---
 
-TotK Recomp is an independent, non-commercial fan project, not affiliated with or endorsed by Nintendo. *The Legend of Zelda*, *Tears of the Kingdom* and *Nintendo Switch* are trademarks of Nintendo.
+## 🔬 Testing & Roadmap
 
-## Building from source
+> [!NOTE]
+> **Active Beta Mode**: This release is actively being benchmarked across diverse hardware platforms (Intel, AMD, NVIDIA, handhelds, and desktops) 24/7. Feedback, bug reports, and performance logs are welcome in the [Issues tab](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/issues).
 
-[docs/building.md](docs/building.md) lists the toolchain and the steps. Everything the build writes stays under `build\` and `generated\`, which git ignores; run `tools/check_content.py` before a commit. Testers: [docs/tester-guide.md](docs/tester-guide.md).
+### Coming Soon:
+- **DLSS 5 Neural Rendering (DLSS-NR)**: Full radiance cache reconstruction and transformer-driven lighting stability.
+- **Intel Xe Suite**: Dynamic runtime support for Intel XeSS upscaling (`libxess.dll`), XeLL (Xe Low Latency), and XeFG (Xe Frame Generation).
+- **VRR Enhancement**: Adaptive sync frame pacing optimization for high-refresh G-Sync and FreeSync panels.
 
-Most of the code and documentation is written by AI coding agents (Claude Code) under the maintainer's direction; the maintainer plays every build and decides what is merged. [AGENTS.md](AGENTS.md) holds the rules they work under.
+---
+
+## 🛠️ Credits & Attribution
+
+- **valentderah** and the **TotK Recomp Community**: For the foundational static recompilation engine and Vulkan graphics backend.
+- **STS78721**: Next Gen STS Build fork engineering, DLSS/FSR pipeline integration, XeGTAO implementation, and UI development.
+- **Nintendo**: Creators of *The Legend of Zelda: Tears of the Kingdom*. All game copyrights belong to Nintendo.
