@@ -196,7 +196,7 @@ class ModernTotkInstaller(ctk.CTk):
                                  font=ctk.CTkFont(size=20, weight="bold"), text_color=ACCENT_GREEN)
         title_lbl.pack(pady=(12, 2))
 
-        sub_lbl = ctk.CTkLabel(header, text="PC Recompiled • Steel Temple Edition (v0.3.4-beta-5) | 60 FPS • DLSS 4.5 • RTGI",
+        sub_lbl = ctk.CTkLabel(header, text="PC Recompiled • Steel Temple Edition (Beta 5) | 60 FPS • DLSS 4.5 • RTGI",
                                font=ctk.CTkFont(size=12), text_color=TEXT_DIM)
         sub_lbl.pack(pady=(0, 12))
 

