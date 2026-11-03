@@ -144,11 +144,11 @@
 # 3D render scale: the scene's size relative to the game resolution, game (5/6, the game's own 1600x900 at 1080p) or
 # a percentage (25 to 400, at most 4096 pixels a side); above 100 supersamples the scene (anti-aliasing). Read at start.
 # render_scale = game
-# Scaling to the window when it is larger than the game resolution: dlss (NVIDIA DLSS 4 / 4.5 / 3), fsr4 (AMD FSR 4.1.2),
+# Scaling to the window when it is larger than the game resolution: dlss (NVIDIA DLSS 4 / 4.5 / 3.5 RR / 3), fsr4 (AMD FSR 4.1.2),
 # fsr (AMD FSR 1.0) or bilinear, and FSR's sharpening from 0 (off) to 100. Changes while the game runs take effect at once.
 # upscaler = fsr
 # upscaler_preset = quality
-# dlss_preset = preset_k
+# dlss_preset = preset_k (or preset_f for DLSS 3.5 Ray Reconstruction / Denoising, preset_m / preset_l for DLSS 4.5)
 # sharpness = 80
 # NVIDIA Reflex low latency (VK_NV_low_latency2): off, on, or boost (keeps GPU clocks high during CPU-bound command replay).
 # reflex = off

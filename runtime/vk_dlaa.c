@@ -491,7 +491,7 @@ static int perf_quality(uint32_t w, uint32_t ow) {
 // TOTK_DLSS_PRESET: the NGX render preset hint (the neural model). Values are NVSDK_NGX_DLSS_Hint_Render_Preset.
 static int preset_value(void) {
     static const struct { const char *name; int v; } t[] = {
-        {"preset_k", 11}, {"preset_j", 10}, {"preset_m", 13}, {"preset_l", 12}, {"preset_e", 5}, {"preset_c", 3},
+        {"preset_f", 6}, {"preset_k", 11}, {"preset_j", 10}, {"preset_m", 13}, {"preset_l", 12}, {"preset_e", 5}, {"preset_c", 3},
         {"default", 0}};
     const char *s = cfg_value("TOTK_DLSS_PRESET");
     for (size_t i = 0; s && i < sizeof t / sizeof *t; i++)
@@ -500,6 +500,7 @@ static int preset_value(void) {
 }
 
 static const char *dlss_gen_name(int pv, int is_upscale) {
+    if (pv == 6) return is_upscale ? "NVIDIA DLSS 3.5 (Ray Reconstruction)" : "NVIDIA DLAA 3.5 (Ray Reconstruction)";
     if (pv == 12 || pv == 13) return is_upscale ? "NVIDIA DLSS 4.5 (Transformer 2)" : "NVIDIA DLAA 4.5 (Transformer 2)";
     if (pv == 11 || pv == 10) return is_upscale ? "NVIDIA DLSS 4 (Transformer 1)" : "NVIDIA DLAA 4 (Transformer 1)";
     if (pv == 5 || pv == 3) return is_upscale ? "NVIDIA DLSS 3 (CNN)" : "NVIDIA DLAA 3 (CNN)";

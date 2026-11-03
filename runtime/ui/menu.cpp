@@ -544,7 +544,8 @@ static bool rows_upscaler(void) {
     bool ask_restart = false;
     static const char *const up_vals[] = {"dlss", "fsr4", "fsr", "bilinear"};
     const char *dp = cfg_value("TOTK_DLSS_PRESET");
-    const char *dlss_title = (!strcmp(dp, "preset_m") || !strcmp(dp, "preset_l")) ? "NVIDIA DLSS 4.5"
+    const char *dlss_title = (!strcmp(dp, "preset_f")) ? "NVIDIA DLSS 3.5 (Ray Reconstruction)"
+                           : (!strcmp(dp, "preset_m") || !strcmp(dp, "preset_l")) ? "NVIDIA DLSS 4.5"
                            : (!strcmp(dp, "preset_k") || !strcmp(dp, "preset_j")) ? "NVIDIA DLSS 4"
                            : (!strcmp(dp, "preset_e") || !strcmp(dp, "preset_c")) ? "NVIDIA DLSS 3 (CNN)"
                                                                                    : "NVIDIA DLSS 4 / 4.5";
@@ -590,13 +591,13 @@ static bool rows_upscaler(void) {
             ask_restart = true;
     }
     if (is_dlss) {
-        static const char *const model_vals[] = {"preset_k", "preset_j", "preset_m", "preset_l", "preset_e", "preset_c",
-                                                 "default"};
+        static const char *const model_vals[] = {"preset_f", "preset_k", "preset_j", "preset_m", "preset_l", "preset_e",
+                                                 "preset_c", "default"};
         static const char *const model_names[] = {
-            "DLSS 4 (Preset K)", "DLSS 4 (Preset J)",
+            "DLSS 3.5 Ray Reconstruction (Preset F)", "DLSS 4 (Preset K)", "DLSS 4 (Preset J)",
             "DLSS 4.5 Perf (Preset M)", "DLSS 4.5 UltraPerf (Preset L)",
             "DLSS 3 CNN (Preset E)", "DLSS 3 CNN (Preset C)", "Default (Auto)"};
-        opt_choice_list("TOTK_DLSS_PRESET", UI_MENU_DLSS_MODEL, model_vals, model_names, 7, UI_MENU_DLSS_MODEL_DESC);
+        opt_choice_list("TOTK_DLSS_PRESET", UI_MENU_DLSS_MODEL, model_vals, model_names, 8, UI_MENU_DLSS_MODEL_DESC);
     }
     if (is_fsr) {
         opt_slider("TOTK_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");

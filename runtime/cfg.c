@@ -114,7 +114,7 @@ static const CfgMeta metas[] = {
     {"OUTPUT_RES", "1920x1080", NULL, RESTART}, {"RENDER_SCALE", "game", "game|33|50|58|67|75|100|125|150|200", RESTART},
     {"UPSCALER", "fsr4", "dlss|fsr4|fsr|bilinear", LIVE}, {"SHARPNESS", "80", "0..100", LIVE},
     {"UPSCALER_PRESET", "native", "native|quality|balanced|performance|ultra_performance", RESTART},
-    {"DLSS_PRESET", "preset_k", "preset_k|preset_j|preset_m|preset_l|preset_e|preset_c|default", LIVE},
+    {"DLSS_PRESET", "preset_k", "preset_f|preset_k|preset_j|preset_m|preset_l|preset_e|preset_c|default", LIVE},
     {"FG_MODE", "off", "off|dlss_fg|fsr3_fg|fsr4_fg", LIVE},
     {"FG_PRESET", "preset_a", "preset_a|preset_b|preset_c", LIVE},
     {"FG_MULT", "2x", "2x|4x|6x", LIVE},
