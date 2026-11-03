@@ -2,7 +2,8 @@
 
 Features:
 - Sleek dark Zonai/Master Sword theme
-- Game executable icon integrated
+- High-resolution multi-size game icon embedded
+- Dynamic tab-synchronized navigation (Back / Next buttons)
 - Vendor AI & Upscaler SDK management (NVIDIA DLSS 4.5 / DLSS-NR, Intel XeSS, AMD FSR)
 - Native Recomp Controller UI selection (PS5 DualSense Monochrome/Color, Xbox Monochrome/Color, Switch)
 - Automated Save Game Importer (auto-detects Eden, Yuzu, Ryujinx saves)
@@ -34,7 +35,6 @@ except (ImportError, ValueError):
         from controller_ui_manager import install_controller_ui, CONTROLLER_UI_CHOICES
         from shortcut_creator import create_desktop_shortcut
     except ImportError:
-        # Fallback when running from PyInstaller bundle
         installer_dir = os.path.dirname(__file__)
         if installer_dir not in sys.path:
             sys.path.insert(0, installer_dir)
@@ -137,10 +137,13 @@ class ModernTotkInstaller(ctk.CTk):
         self.refresh_detected_saves()
 
     def find_game_icon(self):
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
         candidates = [
+            os.path.join(base_dir, "totk_multi.ico"),
+            os.path.join(base_dir, "totk.ico"),
+            r"C:\Games\totk-pc-recomp-src\runtime\totk_multi.ico",
             r"C:\Games\totk-pc-recomp-src\runtime\totk.ico",
-            os.path.join(os.path.dirname(__file__), "..", "runtime", "totk.ico"),
-            os.path.join(os.path.dirname(__file__), "totk.ico"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "runtime", "totk_multi.ico"),
             r"C:\Games\Tears of the Kingdom PC\GAME\totk.exe",
         ]
         for c in candidates:
@@ -197,9 +200,10 @@ class ModernTotkInstaller(ctk.CTk):
                                font=ctk.CTkFont(size=12), text_color=TEXT_DIM)
         sub_lbl.pack(pady=(0, 12))
 
-        # 2. Main Content Frame (Tabview)
+        # 2. Main Content Frame (Tabview) with tab change event bound!
         self.tabview = ctk.CTkTabview(self, fg_color=BG_DARK, segmented_button_selected_color=ACCENT_HOVER,
-                                      segmented_button_selected_hover_color=ACCENT_GREEN)
+                                      segmented_button_selected_hover_color=ACCENT_GREEN,
+                                      command=self.on_tab_changed)
         self.tabview.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
 
         self.tab_files = self.tabview.add("1. Game Files & Location")
@@ -212,26 +216,57 @@ class ModernTotkInstaller(ctk.CTk):
         self.build_tab_guide()
         self.build_tab_install()
 
-        # 3. Bottom Action Bar
+        # 3. Bottom Action Bar with Back & Next buttons
         bottom_bar = ctk.CTkFrame(self, fg_color=CARD_BG, height=60, corner_radius=0)
         bottom_bar.grid(row=2, column=0, sticky="ew")
+
+        self.btn_back = ctk.CTkButton(bottom_bar, text="← Back", fg_color=CARD_BORDER,
+                                      hover_color="#3a4352", font=ctk.CTkFont(size=13, weight="bold"),
+                                      width=100, command=self.go_back_tab)
+        self.btn_back.pack(side="left", padx=20, pady=12)
 
         self.btn_next = ctk.CTkButton(bottom_bar, text="Next: Features & Controllers →", fg_color=ACCENT_HOVER,
                                       hover_color=ACCENT_GREEN, font=ctk.CTkFont(size=14, weight="bold"),
                                       command=self.advance_tab)
         self.btn_next.pack(side="right", padx=20, pady=12)
 
+        self.on_tab_changed()
+
+    def on_tab_changed(self):
+        """Dynamically syncs the bottom navigation buttons with the currently selected tab."""
+        curr = self.tabview.get()
+        if "1." in curr:
+            self.btn_back.configure(state="disabled")
+            self.btn_next.configure(text="Next: Features & Controllers →", state="normal", fg_color=ACCENT_HOVER)
+        elif "2." in curr:
+            self.btn_back.configure(state="normal")
+            self.btn_next.configure(text="Next: Controller Hotkey Guide →", state="normal", fg_color=ACCENT_HOVER)
+        elif "3." in curr:
+            self.btn_back.configure(state="normal")
+            self.btn_next.configure(text="Next: Installation & Launch →", state="normal", fg_color=ACCENT_HOVER)
+        elif "4." in curr:
+            self.btn_back.configure(state="normal")
+            self.btn_next.configure(text="Ready to Install", state="disabled", fg_color=CARD_BORDER)
+
     def advance_tab(self):
         curr = self.tabview.get()
         if "1." in curr:
             self.tabview.set("2. Features & Controllers")
-            self.btn_next.configure(text="Next: Controller Hotkey Guide →")
         elif "2." in curr:
             self.tabview.set("3. Controller Hotkey Guide")
-            self.btn_next.configure(text="Next: Start Installation →")
         elif "3." in curr:
             self.tabview.set("4. Installation & Launch")
-            self.btn_next.configure(text="Ready to Install")
+        self.on_tab_changed()
+
+    def go_back_tab(self):
+        curr = self.tabview.get()
+        if "2." in curr:
+            self.tabview.set("1. Game Files & Location")
+        elif "3." in curr:
+            self.tabview.set("2. Features & Controllers")
+        elif "4." in curr:
+            self.tabview.set("3. Controller Hotkey Guide")
+        self.on_tab_changed()
 
     def build_tab_files(self):
         frame = self.tab_files
@@ -405,6 +440,7 @@ class ModernTotkInstaller(ctk.CTk):
 
         self.btn_start.configure(state="disabled", text="INSTALLING...")
         self.tabview.set("4. Installation & Launch")
+        self.on_tab_changed()
         
         threading.Thread(target=self.run_install_worker, daemon=True).start()
 
