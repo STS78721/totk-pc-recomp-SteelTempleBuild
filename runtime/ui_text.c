@@ -125,6 +125,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_RTGI_BOUNCE] = "RTGi bounce intensity",
     [UI_MENU_RTGI_BOUNCE_DESC] = "Multiplier for indirect bounce lighting and color bleeding (0 to 200 %, default 100 %). "
                                  "Applies at once.",
+    [UI_MENU_RTGI_DEBUG] = "RTGi visualizer / debug",
+    [UI_MENU_RTGI_DEBUG_DESC] = "Debug view: Normal (gameplay), RTGi Diffuse Bounce Only (isolates indirect ray-traced light), "
+                                "XeGTAO Occlusion Only (ambient occlusion mask in greyscale), or Reconstructed Normals (view-space 3D normals).",
     [UI_MENU_CONTACT_SHADOWS] = "Contact shadows",
     [UI_MENU_CONTACT_SHADOWS_DESC] = "Small sun shadows the shadow maps miss: at feet, under stones, in grass and creases. "
                                      "Traced on the screen after lighting. Applies at once.",

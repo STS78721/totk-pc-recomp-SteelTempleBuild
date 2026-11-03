@@ -147,11 +147,17 @@ void vk_contact_flush(VkExec *ex) {
     int bounce_pct = cfg_int("TOTK_RTGI_BOUNCE");
     float rtgi_bounce = (bounce_pct > 0) ? ((float)bounce_pct / 100.0f) : 1.0f;
 
+    const char *dbg = cfg_value("TOTK_RTGI_DEBUG");
+    float vis_val = 0.0f;
+    if (!strcmp(dbg, "rtgi_only") || !strcmp(dbg, "1")) vis_val = 1.0f;
+    else if (!strcmp(dbg, "ao_only") || !strcmp(dbg, "2") || C.debug) vis_val = 2.0f;
+    else if (!strcmp(dbg, "normals") || !strcmp(dbg, "3")) vis_val = 3.0f;
+
     VkCommandBuffer cb = ex->cb;
     float pcv[16] = {px, py, zfar, (float)C.strength / 100.0f,
                      lx / ll, ly / ll, lz / ll, 0.6f,
                      (float)C.w, (float)C.h, 1.0f / (float)C.w, 1.0f / (float)C.h,
-                     (float)C.debug, ao_mode_val, rtgi_tier, rtgi_bounce};
+                     vis_val, ao_mode_val, rtgi_tier, rtgi_bounce};
     if (!C.logged) {
         C.logged = 1;
         rt_log("vk: AO & RTGI on %ux%u scene (AO: %s, RTGI: %s, bounce: %.0f%%), far %g", C.w, C.h,

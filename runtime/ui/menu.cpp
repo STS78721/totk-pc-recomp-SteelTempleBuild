@@ -705,13 +705,16 @@ static void rows_ao(void) {
 
 static void rows_rtgi(void) {
     static const char *const rt_vals[] = {"off", "low", "medium", "high", "ultra"};
-    static const char *const rt_names[] = {"Off", "Low (2 rays / 8 steps)", "Medium (3 rays / 12 steps)", "High (4 rays / 16 steps)", "Ultra (6 rays / 20 steps)"};
+    static const char *const rt_names[] = {"Off", "Low (2 rays / 10 steps)", "Medium (4 rays / 14 steps)", "High (6 rays / 20 steps)", "Ultra (8 rays / 28 steps)"};
     if (opt_choice_list("TOTK_RTGI", UI_MENU_RTGI, rt_vals, rt_names, 5, UI_MENU_RTGI_DESC)) {
         cfg_save();
     }
     const char *rt = cfg_value("TOTK_RTGI");
     if (strcmp(rt, "off")) {
         opt_slider("TOTK_RTGI_BOUNCE", UI_MENU_RTGI_BOUNCE, 0, 200, UI_MENU_RTGI_BOUNCE_DESC, 10, "%.0f %%");
+        static const char *const dbg_vals[] = {"off", "rtgi_only", "ao_only", "normals"};
+        static const char *const dbg_names[] = {"Off (Normal Game)", "RTGi Diffuse Bounce Only", "XeGTAO Occlusion Mask Only", "Reconstructed 3D Normals"};
+        opt_choice_list("TOTK_RTGI_DEBUG", UI_MENU_RTGI_DEBUG, dbg_vals, dbg_names, 4, UI_MENU_RTGI_DEBUG_DESC);
     }
 }
 
