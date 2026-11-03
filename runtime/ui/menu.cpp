@@ -1292,7 +1292,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     // the port version and the game update, right-aligned on the title line: what a bug report needs first
     char game[16], version[128], pver[64];
     snprintf(game, sizeof game, "%d.%d.%d", rt_game_version / 100, rt_game_version / 10 % 10, rt_game_version % 10);
-    snprintf(pver, sizeof pver, "%s-beta2", rt_port_version);
+    snprintf(pver, sizeof pver, "%s-beta2 (Next Gen STS Build)", rt_port_version);
     snprintf(version, sizeof version, menu_text(UI_MENU_VERSION), pver, game);
     ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(version).x);
     ImGui::TextDisabled("%s", version);
