@@ -265,6 +265,15 @@
 # rumble_strength = 130
 # rumble_curve = 0.6
 # rumble_triggers = 0
+# PlayStation 5 DualSense Controller: adaptive triggers (bow tension, shield resistance), voice-coil haptics,
+# and interactive controller speaker audio (arrow shot, shield block, weapon hit, chest open, fast travel).
+# dualsense = 1
+# dualsense_triggers = 1
+# dualsense_trigger_strength = 100
+# dualsense_audio = 1
+# dualsense_vol = 100
+# dualsense_audio_mode = interactive
+# dualsense_haptics = 1
 # Which gamepad button is Switch A: nintendo (by position: east A, south B, west Y, north X), xbox (south A, east B,
 # west X, north Y, as an Xbox pad labels them; cross A on a PlayStation pad) or auto (nintendo for a pad with Nintendo
 # labels, xbox for the others). The bind_ lines below apply on top. Changes while the game runs take effect at once.

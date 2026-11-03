@@ -26,29 +26,12 @@
 #include "platform/platform.h"
 
 void vk_upscaler_log(const char *fmt, ...) {
-    static FILE *fp;
-    static int init_done;
-    if (!init_done) {
-        init_done = 1;
-        char exe[1024], path[1060];
-        if (plat_exe_path(exe, sizeof exe)) {
-            char *last = plat_last_sep(exe);
-            if (last) {
-                snprintf(path, sizeof path, "%.*s/upscaler.log", (int)(last - exe), exe);
-                fp = fopen(path, "w");
-            }
-        }
-    }
     char buf[1024];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
     rt_log("[UPSCALER] %s", buf);
-    if (fp) {
-        fprintf(fp, "[UPSCALER] %s\n", buf);
-        fflush(fp);
-    }
 }
 
 #define SLOTS 8
@@ -304,24 +287,22 @@ int vk_fsr_scene(VkCommandBuffer cb, VkImageView src_view, VkImage src_img, uint
     int sharp = cfg_int("TOTK_SHARPNESS");
     if (sharp < 0) sharp = 0;
     if (sharp > 100) sharp = 100;
-    if (fsr4 && sharp < 68) sharp = 68;
-    if (!upscale && (!fsr4 || sharp <= 0)) return 0;
+    if (!upscale) return 0;
     VkCtx *c = vk_ctx();
     if (!F.tried) init(c);
     if (!F.ok || !ensure_scene_images(c, dw, dh)) return 0;
     static int last_mode = -1, last_sharp = -1;
     static uint32_t last_sw, last_dw;
     static uint64_t fsr_frames;
-    float stops = fsr4 ? (float)(100 - sharp) / 85.0f : (float)(100 - sharp) / 50.0f;
+    float stops = (float)(100 - sharp) / 50.0f;
     if (fsr4 != last_mode || sharp != last_sharp || sw != last_sw || dw != last_dw) {
         last_mode = fsr4, last_sharp = sharp, last_sw = sw, last_dw = dw;
-        vk_upscaler_log("ENGAGED: %s (%s) | Scene: %ux%u -> Output: %ux%u (%.1f%%) | Sharpness: %d%% (RCAS stops=%.2f) | Native Scaler Skipped: %s",
-                        fsr4 ? "AMD FSR 4.1.2" : "AMD FSR 1.0", upscale ? "EASU + RCAS Upscale" : "RCAS Native Pass",
-                        sw, sh, dw, dh, dw ? sw * 100.0 / dw : 100.0, sharp, stops, upscale ? "YES" : "N/A (100% Native)");
+        vk_upscaler_log("ENGAGED: AMD FSR 1.0 (EASU + RCAS Upscale) | Scene: %ux%u -> Output: %ux%u (%.1f%%) | Sharpness: %d%% (RCAS stops=%.2f) | Native Scaler Skipped: YES",
+                        sw, sh, dw, dh, dw ? sw * 100.0 / dw : 100.0, sharp, stops);
     }
     if (++fsr_frames % 600 == 0) {
-        vk_upscaler_log("STATUS: %s active for %llu frames | Scene: %ux%u -> Output: %ux%u | Sharpness: %d%%",
-                        fsr4 ? "AMD FSR 4.1.2" : "AMD FSR 1.0", (unsigned long long)fsr_frames, sw, sh, dw, dh, sharp);
+        vk_upscaler_log("STATUS: AMD FSR 1.0 active for %llu frames | Scene: %ux%u -> Output: %ux%u | Sharpness: %d%%",
+                        (unsigned long long)fsr_frames, sw, sh, dw, dh, sharp);
     }
     const VkPipelineStageFlags2 ALL = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, CS = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                                 XF = VK_PIPELINE_STAGE_2_TRANSFER_BIT;

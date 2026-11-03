@@ -90,7 +90,10 @@ static void decide(void) {
     double k = 5.0 / 6.0;
     // a DLSS mode other than dlaa sets the scene size, only while DLSS/DLAA is on: switched off, the mode the menu
     // still holds would shrink the scene for the plain upscaler
+    const char *pr = cfg_value("TOTK_UPSCALER_PRESET");
     const char *m = cfg_value("TOTK_DLSS");
+    if (pr && strcmp(pr, "native")) m = pr;
+    else if (pr && !strcmp(pr, "native")) m = "dlaa";
     static const struct { const char *name; double k; } dlss[] = {
         {"dlaa", 1.0}, {"quality", 2.0 / 3.0}, {"balanced", 0.58}, {"performance", 0.5}, {"ultra_performance", 1.0 / 3.0}};
     int dlss_on = cfg_bool("TOTK_DLAA") || !strcmp(cfg_value("TOTK_UPSCALER"), "dlss");

@@ -14,6 +14,7 @@
 #include "cfg.h"
 #include "host.h"
 #include "input.h"
+#include "dualsense.h"
 #include "ov.h"
 #include "platform/platform.h"
 
@@ -323,6 +324,7 @@ static void play(int side, const VibrationValue *v) {
     if (side < 0) return;
     VibrationValue c = *v;
     if (!isfinite(c.amp_low) || !isfinite(c.amp_high) || !isfinite(c.freq_low) || !isfinite(c.freq_high)) c = vib_neutral;
+    dualsense_on_vibration(side, c.amp_low, c.freq_low, c.amp_high, c.freq_high);
     static volatile int32_t first, first_on;
     if (!plat_xchg32(&first, 1))
         rt_log("hid: first vibration value from the game: %s %.2f@%.0f Hz %.2f@%.0f Hz", side ? "right" : "left",

@@ -720,7 +720,10 @@ void plat_aligned_free(void *p) { _aligned_free(p); }
 
 // ---- process
 
+extern void dualsense_cleanup(void);
+
 void plat_exit(int code) {
+    dualsense_cleanup();
     fflush(stdout);
     fflush(stderr);
     ExitProcess((UINT)code);

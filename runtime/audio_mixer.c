@@ -176,6 +176,9 @@ static void SDLCALL sdl_pull(void *user, SDL_AudioStream *stream, int additional
     }
 }
 
+extern void dualsense_init(void);
+extern void dualsense_feed_audio(const float *lr, int frames, int rate);
+
 static void output_open(Mixer *m, int rate) {
     const char *mode = cfg_get("TOTK_AUDIO");
     if ((mode && !strcmp(mode, "none")) || cfg_get("TOTK_AUDIO_OFF")) {
@@ -210,6 +213,7 @@ static void output_open(Mixer *m, int rate) {
     const char *name = SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(m->stream));
     rt_log("audio: SDL device '%s' opened, %d Hz stereo float, prefill %d ms, device period %d frames; the device paces "
            "rendering at %.1f ms queued", name ? name : "?", rate, m->prefill * 5, period, m->target * 1000.0 / rate);
+    dualsense_init();
 }
 
 int64_t audio_mixer_pace_ns(AudioRenderer *r, uint64_t now) {
@@ -225,6 +229,7 @@ int64_t audio_mixer_pace_ns(AudioRenderer *r, uint64_t now) {
 
 // Render thread only.
 static void output_push(Mixer *m, const float *lr, int frames) {
+    dualsense_feed_audio(lr, frames, m->rate);
     uint64_t wr = atomic_load(&m->wr), rd = atomic_load_explicit(&m->rd, memory_order_acquire);
     if (m->device_ok && wr + (uint64_t)frames - rd > RING_FRAMES) {   // device stalled: drop this frame
         atomic_fetch_add(&m->overruns, 1);
