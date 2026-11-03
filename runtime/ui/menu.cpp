@@ -1492,6 +1492,14 @@ static std::atomic<int> g_perf_save;     // F10 changed the mode: totk.ini is wr
 static uint64_t g_perf_last_ns, g_perf_win_ns, g_perf_max_ns;
 static int g_perf_frames;
 static char g_perf_text[96];
+static char g_perf_fps_num[32];
+static char g_perf_ms_num[32];
+static char g_perf_upscaler[64];
+static char g_perf_line2[128];
+static char g_perf_fg_badge[32];
+static char g_perf_nr_badge[32];
+static int  g_perf_theme;                // 0: NVIDIA green, 1: AMD red, 2: Cyber cyan
+static bool g_perf_nr_active;
 
 static int perf_mode_of(const char *s) { return !strcmp(s, "full") ? 2 : !strcmp(s, "fps") ? 1 : 0; }
 
@@ -1533,6 +1541,7 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
         int m = perf_mode_of(cfg_value("TOTK_PERF_OVERLAY"));
         if (m != g_perf_mode) {
             g_perf_last_ns = 0, g_perf_text[0] = 0;
+            g_perf_fps_num[0] = 0;
             if (m == 2) perf_gpu_once(t);
             perfmon_mode(m);
         }
@@ -1550,8 +1559,85 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
         if (g_perf_win_ns >= 500000000ull) {
             int fgm = vk_fg_active_multiplier();
             double fps = (g_perf_frames * 1e9 / g_perf_win_ns) * (fgm > 1 ? fgm : 1);
-            if (fgm > 1) snprintf(g_perf_text, sizeof g_perf_text, "%.0f fps (FG %dx)", fps, fgm);
-            else snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS), fps);
+            double avg_ms = (g_perf_win_ns / (double)g_perf_frames) / 1e6 / (fgm > 1 ? fgm : 1);
+            if (fps >= 100.0) snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.0f FPS", fps);
+            else snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.1f FPS", fps);
+            snprintf(g_perf_ms_num, sizeof g_perf_ms_num, "%.1f ms", avg_ms);
+
+            if (fgm > 1) {
+                const char *fgm_mode = cfg_value("TOTK_FG_MODE");
+                const char *fgt = (!strcmp(fgm_mode, "dlss_fg") && vk_gpu_is_nvidia()) ? "DLSS FG"
+                                : (!strcmp(fgm_mode, "fsr4_fg") && vk_gpu_is_rx9000()) ? "FSR4 FG" : "FSR3 FG";
+                snprintf(g_perf_fg_badge, sizeof g_perf_fg_badge, "%s %dx", fgt, fgm);
+                snprintf(g_perf_text, sizeof g_perf_text, "%.0f fps (FG %dx)", fps, fgm);
+            } else {
+                g_perf_fg_badge[0] = 0;
+                snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS), fps);
+            }
+
+            const char *up = cfg_value("TOTK_UPSCALER");
+            bool is_nr = cfg_bool("TOTK_DLSS_NR");
+            bool is_dlaa = cfg_bool("TOTK_DLAA");
+            bool is_dlss = !strcmp(up, "dlss");
+            bool is_fsr4 = !strcmp(up, "fsr4");
+            bool is_fsr = !strcmp(up, "fsr");
+            uint64_t nr_disp = vk_dlss_nr_dispatches();
+            g_perf_nr_active = (is_nr && nr_disp > 0);
+
+            if (is_nr) {
+                g_perf_theme = 0;
+                const char *nr_preset = cfg_value("TOTK_DLSS_NR_PRESET");
+                const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "Preset B" : nr_preset;
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "DLSS-NR · %s", pr_display);
+                snprintf(g_perf_nr_badge, sizeof g_perf_nr_badge, nr_disp > 0 ? "NR ACTIVE" : "NR READY");
+            } else if (is_dlss || is_dlaa) {
+                g_perf_theme = 0;
+                const char *preset = cfg_value("TOTK_DLSS_PRESET");
+                char pbuf[32];
+                if (preset && (!strncasecmp(preset, "preset_", 7))) {
+                    char c = preset[7];
+                    if (c >= 'a' && c <= 'z') c -= 32;
+                    snprintf(pbuf, sizeof pbuf, "Preset %c", c);
+                } else snprintf(pbuf, sizeof pbuf, "%s", preset && preset[0] ? preset : "Preset M");
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s · %s", is_dlaa ? "DLAA 4.5" : "DLSS 4.5", pbuf);
+                g_perf_nr_badge[0] = 0;
+            } else if (is_fsr4) {
+                g_perf_theme = 1;
+                int s = cfg_int("TOTK_SHARPNESS");
+                s = s < 0 ? 0 : s > 100 ? 100 : s;
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "FSR 4.1.2 · %d%%", s < 68 ? 68 : s);
+                g_perf_nr_badge[0] = 0;
+            } else if (is_fsr) {
+                g_perf_theme = 1;
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "AMD FSR 1.0");
+                g_perf_nr_badge[0] = 0;
+            } else {
+                g_perf_theme = 2;
+                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "Native");
+                g_perf_nr_badge[0] = 0;
+            }
+
+            // Line 2: Upscaler + Resolution scale + Hybrid MV + Reflex
+            unsigned out[2], scene[2];
+            res_sizes(out, scene);
+            char line2[128];
+            snprintf(line2, sizeof line2, "%s", g_perf_upscaler);
+
+            if (scene[0] > 0 && out[0] > 0 && scene[0] < out[0]) {
+                char res_buf[32];
+                if (out[1] == 2160 && scene[1] == 1080) snprintf(res_buf, sizeof res_buf, " | 1080p -> 4K");
+                else if (out[1] == 1440 && scene[1] == 720) snprintf(res_buf, sizeof res_buf, " | 720p -> 1440p");
+                else snprintf(res_buf, sizeof res_buf, " | %up -> %up", scene[1], out[1]);
+                strncat(line2, res_buf, sizeof(line2) - strlen(line2) - 1);
+            }
+            if (is_nr || is_dlss || is_fsr4) {
+                strncat(line2, " | Hybrid MV", sizeof(line2) - strlen(line2) - 1);
+            }
+            if (cfg_bool("TOTK_REFLEX")) {
+                strncat(line2, " | Reflex", sizeof(line2) - strlen(line2) - 1);
+            }
+            snprintf(g_perf_line2, sizeof g_perf_line2, "%s", line2);
+
             g_perf_win_ns = g_perf_max_ns = 0;
             g_perf_frames = 0;
         }
@@ -1606,49 +1692,125 @@ static float perf_gb(float mb) { return mb < 0 ? -1 : mb / 1024; }
 static void perf_picture(const MenuTarget *t, const ImVec4 &c) {
     unsigned out[2], scene[2];
     res_sizes(out, scene);
-    char v[6][64];
-    snprintf(v[0], sizeof v[0], menu_text(UI_MENU_OV_FMT_SIZE), t->width, t->height);
-    snprintf(v[1], sizeof v[1], menu_text(UI_MENU_OV_FMT_SIZE), (unsigned)t->image_w, (unsigned)t->image_h);
-    snprintf(v[2], sizeof v[2], menu_text(UI_MENU_OV_FMT_SCENE), scene[0], scene[1], scene[0] * 100.0 / out[0]);
+    struct Row {
+        const char *label_str;
+        UiTextId label_id;
+        char val[96];
+    };
+    Row rows[12];
+    int n = 0;
+
+    // Window
+    rows[n].label_str = nullptr;
+    rows[n].label_id = UI_MENU_OV_WINDOW;
+    snprintf(rows[n].val, sizeof rows[n].val, menu_text(UI_MENU_OV_FMT_SIZE), t->width, t->height);
+    n++;
+
+    // Output
+    rows[n].label_str = nullptr;
+    rows[n].label_id = UI_MENU_OV_OUTPUT;
+    snprintf(rows[n].val, sizeof rows[n].val, menu_text(UI_MENU_OV_FMT_SIZE), (unsigned)t->image_w, (unsigned)t->image_h);
+    n++;
+
+    // Scene
+    rows[n].label_str = nullptr;
+    rows[n].label_id = UI_MENU_OV_SCENE;
+    snprintf(rows[n].val, sizeof rows[n].val, menu_text(UI_MENU_OV_FMT_SCENE), scene[0], scene[1], scene[0] * 100.0 / (out[0] ? out[0] : 1));
+    n++;
+
+    // Scaling / Upscaler
     const char *up = cfg_value("TOTK_UPSCALER");
     int s = cfg_int("TOTK_SHARPNESS");
     s = s < 0 ? 0 : s > 100 ? 100 : s;
-    if (!strcmp(up, "dlss") || cfg_bool("TOTK_DLAA")) {
-        snprintf(v[3], sizeof v[3], "%s (%s)", scene[0] < out[0] ? "NVIDIA DLSS 4.5" : "NVIDIA DLAA",
+    rows[n].label_str = nullptr;
+    rows[n].label_id = UI_MENU_OV_SCALING;
+    if (cfg_bool("TOTK_DLSS_NR")) {
+        const char *nr_preset = cfg_value("TOTK_DLSS_NR_PRESET");
+        const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "Preset B" : nr_preset;
+        snprintf(rows[n].val, sizeof rows[n].val, "NVIDIA DLSS-NR (%s Fast Model)", pr_display);
+    } else if (!strcmp(up, "dlss") || cfg_bool("TOTK_DLAA")) {
+        snprintf(rows[n].val, sizeof rows[n].val, "%s (%s)", scene[0] < out[0] ? "NVIDIA DLSS 4.5" : "NVIDIA DLAA",
                  cfg_value("TOTK_DLSS_PRESET"));
     } else if (!strcmp(up, "fsr4")) {
-        snprintf(v[3], sizeof v[3], "AMD FSR 4.1.2 (sharp %d%%)", s < 68 ? 68 : s);
+        snprintf(rows[n].val, sizeof rows[n].val, "AMD FSR 4.1.2 (sharp %d%%)", s < 68 ? 68 : s);
     } else if (!strcmp(up, "fsr") && (scene[0] < out[0] || t->scaler == 2)) {
-        snprintf(v[3], sizeof v[3], menu_text(UI_MENU_OV_FMT_FSR), s);
+        snprintf(rows[n].val, sizeof rows[n].val, menu_text(UI_MENU_OV_FMT_FSR), s);
     } else {
         int down = t->scaler == 1 && !strcmp(up, "fsr") && (t->image_w > (int)t->width || t->image_h > (int)t->height);
-        snprintf(v[3], sizeof v[3], "%s",
+        snprintf(rows[n].val, sizeof rows[n].val, "%s",
                  menu_text(down ? UI_MENU_OV_SCALE_DOWN : t->scaler ? UI_MENU_OV_SCALE_BILINEAR : UI_MENU_OV_SCALE_NONE));
     }
+    n++;
+
+    // DLSS Neural Rendering row
+    rows[n].label_str = "DLSS Neural NR";
+    rows[n].label_id = (UiTextId)0;
+    if (cfg_bool("TOTK_DLSS_NR")) {
+        uint64_t d = vk_dlss_nr_dispatches();
+        if (d > 0) snprintf(rows[n].val, sizeof rows[n].val, "Active · %llu frames (Preset B)", (unsigned long long)d);
+        else snprintf(rows[n].val, sizeof rows[n].val, "Ready · Preset B (nvngx_dlssnr.dll)");
+    } else {
+        snprintf(rows[n].val, sizeof rows[n].val, "Disabled");
+    }
+    n++;
+
+    // Motion Vectors row
+    rows[n].label_str = "Motion Vectors";
+    rows[n].label_id = (UiTextId)0;
+    snprintf(rows[n].val, sizeof rows[n].val, "Hybrid Dynamic 3D (Depth-Guided)");
+    n++;
+
+    // Frame Generation row (if active)
     int fg_mult = vk_fg_active_multiplier();
     if (fg_mult > 1) {
-        size_t l3 = strlen(v[3]);
+        rows[n].label_str = "Frame Gen";
+        rows[n].label_id = (UiTextId)0;
         const char *fgm = cfg_value("TOTK_FG_MODE");
         const char *fgt = (!strcmp(fgm, "dlss_fg") && vk_gpu_is_nvidia()) ? "DLSS FG"
                         : (!strcmp(fgm, "fsr4_fg") && vk_gpu_is_rx9000()) ? "FSR4 FG" : "FSR3 FG";
-        if (l3 + 16 < sizeof v[3]) snprintf(v[3] + l3, sizeof v[3] - l3, " + %s %dx", fgt, fg_mult);
+        snprintf(rows[n].val, sizeof rows[n].val, "%s (%dx Active)", fgt, fg_mult);
+        n++;
     }
+
+    // Low Latency row
+    rows[n].label_str = "Low Latency";
+    rows[n].label_id = (UiTextId)0;
+    if (cfg_bool("TOTK_REFLEX")) {
+        snprintf(rows[n].val, sizeof rows[n].val, "NVIDIA Reflex Boost (Active)");
+    } else {
+        snprintf(rows[n].val, sizeof rows[n].val, "Standard (Off)");
+    }
+    n++;
+
+    // Limit
     double hz = frame_step_limit_hz();
-    snprintf(v[4], sizeof v[4], "%s", menu_text(UI_MENU_OV_NONE));
-    if (hz > 0) snprintf(v[4], sizeof v[4], menu_text(UI_MENU_OV_FPS), hz);
+    rows[n].label_str = nullptr;
+    rows[n].label_id = UI_MENU_OV_LIMIT;
+    snprintf(rows[n].val, sizeof rows[n].val, "%s", menu_text(UI_MENU_OV_NONE));
+    if (hz > 0) snprintf(rows[n].val, sizeof rows[n].val, menu_text(UI_MENU_OV_FPS), hz);
+    n++;
+
+    // Present
     const char *pm = present_name(gfx_window_present_mode());
-    snprintf(v[5], sizeof v[5], "%s", pm ? pm : menu_text(UI_MENU_OV_NONE));
-    static const UiTextId labels[6] = {UI_MENU_OV_WINDOW, UI_MENU_OV_OUTPUT, UI_MENU_OV_SCENE,
-                                       UI_MENU_OV_SCALING, UI_MENU_OV_LIMIT, UI_MENU_OV_PRESENT};
+    rows[n].label_str = nullptr;
+    rows[n].label_id = UI_MENU_OV_PRESENT;
+    snprintf(rows[n].val, sizeof rows[n].val, "%s", pm ? pm : menu_text(UI_MENU_OV_NONE));
+    n++;
+
     if (!ImGui::BeginTable("##perfp", 2, ImGuiTableFlags_SizingFixedFit)) return;
     float vw = 0;
-    for (auto &s : v) vw = fmaxf(vw, ImGui::CalcTextSize(s).x);
+    for (int i = 0; i < n; i++) vw = fmaxf(vw, ImGui::CalcTextSize(rows[i].val).x);
     ImGui::TableSetupColumn("##p0", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupColumn("##p1", ImGuiTableColumnFlags_WidthFixed, vw);
-    for (int i = 0; i < 6; i++) {
-        perf_label(labels[i], c);
+    for (int i = 0; i < n; i++) {
+        if (rows[i].label_id != (UiTextId)0) {
+            perf_label(rows[i].label_id, c);
+        } else {
+            ImGui::TableNextColumn();
+            ImGui::TextColored(c, "%s", rows[i].label_str);
+        }
         ImGui::TableNextColumn();
-        perf_right(v[i], false);
+        perf_right(rows[i].val, false);
     }
     ImGui::EndTable();
 }
@@ -1737,14 +1899,122 @@ static void perf_full_draw(const MenuTarget *t, float scale) {
 static void perf_draw(const MenuTarget *t, float scale) {
     if (g_perf_mode == 2) return perf_full_draw(t, scale);
     float w = (float)t->width;
-    if (!g_perf_mode || !g_perf_text[0]) return;
+    if (!g_perf_mode || !g_perf_fps_num[0]) return;
     // with the menu open: under its window, over the dimming layout_menu drew before
     ImDrawList *dl = g_open.load(std::memory_order_relaxed) ? ImGui::GetBackgroundDrawList() : ImGui::GetForegroundDrawList();
-    ImVec2 sz = ImGui::CalcTextSize(g_perf_text);
-    float pad = 6 * scale;
-    ImVec2 p(w - 12 * scale - sz.x - pad * 2, 12 * scale);   // the top right corner: the game's HUD leaves it empty
-    dl->AddRectFilled(p, ImVec2(p.x + sz.x + pad * 2, p.y + sz.y + pad * 2), IM_COL32(0, 0, 0, 150), 4 * scale);
-    dl->AddText(ImVec2(p.x + pad, p.y + pad), IM_COL32(255, 255, 255, 235), g_perf_text);
+
+    float pad_x = 12.0f * scale;
+    float pad_y = 6.0f * scale;
+    float spacing_x = 8.0f * scale;
+    float line_gap = 4.0f * scale;
+
+    // Line 1: [LED Dot] [FPS] [ms] [FG Badge] [NR Badge]
+    float dot_rad = 3.5f * scale;
+    float dot_area_w = dot_rad * 2.0f + 8.0f * scale;
+    ImVec2 sz_fps = ImGui::CalcTextSize(g_perf_fps_num);
+    ImVec2 sz_ms = ImGui::CalcTextSize(g_perf_ms_num);
+
+    ImVec2 sz_fg = g_perf_fg_badge[0] ? ImGui::CalcTextSize(g_perf_fg_badge) : ImVec2(0, 0);
+    float fg_pill_w = g_perf_fg_badge[0] ? (sz_fg.x + 8.0f * scale) : 0.0f;
+
+    ImVec2 sz_nr = g_perf_nr_badge[0] ? ImGui::CalcTextSize(g_perf_nr_badge) : ImVec2(0, 0);
+    float nr_pill_w = g_perf_nr_badge[0] ? (sz_nr.x + 8.0f * scale) : 0.0f;
+
+    float line1_w = dot_area_w + sz_fps.x + spacing_x + sz_ms.x;
+    if (fg_pill_w > 0) line1_w += spacing_x + fg_pill_w;
+    if (nr_pill_w > 0) line1_w += spacing_x + nr_pill_w;
+    float line1_h = sz_fps.y;
+
+    // Line 2: [Upscaler / Model] + [Scaling / MV / Reflex]
+    ImVec2 sz_line2 = ImGui::CalcTextSize(g_perf_line2);
+    float line2_w = sz_line2.x;
+    float line2_h = sz_line2.y;
+
+    float card_w = fmaxf(line1_w, line2_w) + pad_x * 2.0f;
+    float card_h = line1_h + line2_h + line_gap + pad_y * 2.0f;
+
+    ImVec2 p_min(w - 14.0f * scale - card_w, 12.0f * scale);
+    ImVec2 p_max(p_min.x + card_w, p_min.y + card_h);
+
+    // Color theme
+    ImU32 border_col = (g_perf_theme == 0) ? IM_COL32(118, 185, 0, 180)   // NVIDIA RTX Green
+                     : (g_perf_theme == 1) ? IM_COL32(235, 60, 60, 180)   // AMD Crimson
+                     : IM_COL32(40, 160, 230, 160);                        // Cyber Cyan
+
+    ImU32 dot_core_col = g_perf_nr_active     ? IM_COL32(118, 255, 0, 255)
+                       : (g_perf_theme == 0)  ? IM_COL32(118, 185, 0, 255)
+                       : (g_perf_theme == 1)  ? IM_COL32(245, 65, 65, 255)
+                       : IM_COL32(50, 185, 255, 255);
+
+    ImU32 dot_glow_col = g_perf_nr_active     ? IM_COL32(118, 255, 0, 75)
+                       : (g_perf_theme == 0)  ? IM_COL32(118, 185, 0, 65)
+                       : (g_perf_theme == 1)  ? IM_COL32(245, 65, 65, 65)
+                       : IM_COL32(50, 185, 255, 65);
+
+    // Card background & sleek rounded border
+    dl->AddRectFilled(p_min, p_max, IM_COL32(12, 16, 24, 225), 5.0f * scale);
+    dl->AddRect(p_min, p_max, border_col, 5.0f * scale, 0, 1.2f * scale);
+
+    // Line 1 drawing:
+    float cur_x = p_min.x + pad_x;
+    float line1_y = p_min.y + pad_y;
+
+    // LED Dot
+    ImVec2 dot_c(cur_x + dot_rad + 1.0f * scale, line1_y + line1_h * 0.5f);
+    dl->AddCircleFilled(dot_c, dot_rad + 2.0f * scale, dot_glow_col);
+    dl->AddCircleFilled(dot_c, dot_rad, dot_core_col);
+    cur_x += dot_area_w;
+
+    // Numeric FPS
+    dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(255, 255, 255, 255), g_perf_fps_num);
+    cur_x += sz_fps.x + spacing_x;
+
+    // Frame Time
+    dl->AddText(ImVec2(cur_x, line1_y), IM_COL32(160, 185, 215, 230), g_perf_ms_num);
+    cur_x += sz_ms.x;
+
+    // FG Pill Badge
+    if (fg_pill_w > 0) {
+        cur_x += spacing_x;
+        ImVec2 fg_min(cur_x, line1_y + 0.5f * scale);
+        ImVec2 fg_max(cur_x + fg_pill_w, line1_y + line1_h - 0.5f * scale);
+        dl->AddRectFilled(fg_min, fg_max, IM_COL32(105, 40, 175, 190), 3.0f * scale);
+        dl->AddRect(fg_min, fg_max, IM_COL32(175, 100, 250, 220), 3.0f * scale, 0, 1.0f * scale);
+        dl->AddText(ImVec2(cur_x + 4.0f * scale, line1_y), IM_COL32(245, 215, 255, 255), g_perf_fg_badge);
+        cur_x += fg_pill_w;
+    }
+
+    // NR Pill Badge
+    if (nr_pill_w > 0) {
+        cur_x += spacing_x;
+        ImVec2 nr_min(cur_x, line1_y + 0.5f * scale);
+        ImVec2 nr_max(cur_x + nr_pill_w, line1_y + line1_h - 0.5f * scale);
+        ImU32 nr_bg = g_perf_nr_active ? IM_COL32(20, 85, 25, 210) : IM_COL32(40, 60, 45, 180);
+        ImU32 nr_bd = g_perf_nr_active ? IM_COL32(80, 220, 45, 240) : IM_COL32(100, 160, 110, 200);
+        ImU32 nr_tx = g_perf_nr_active ? IM_COL32(165, 255, 135, 255) : IM_COL32(180, 210, 185, 230);
+        dl->AddRectFilled(nr_min, nr_max, nr_bg, 3.0f * scale);
+        dl->AddRect(nr_min, nr_max, nr_bd, 3.0f * scale, 0, 1.0f * scale);
+        dl->AddText(ImVec2(cur_x + 4.0f * scale, line1_y), nr_tx, g_perf_nr_badge);
+        cur_x += nr_pill_w;
+    }
+
+    // Line 2: Upscaler + Extra Badges
+    float line2_y = line1_y + line1_h + line_gap;
+    float l2_x = p_min.x + pad_x;
+
+    // Draw upscaler portion in accent color
+    ImVec2 sz_up = ImGui::CalcTextSize(g_perf_upscaler);
+    ImU32 up_col = (g_perf_theme == 0) ? (g_perf_nr_active ? IM_COL32(125, 245, 45, 255) : IM_COL32(118, 195, 20, 255))
+                 : (g_perf_theme == 1) ? IM_COL32(255, 95, 95, 255)
+                 : IM_COL32(95, 205, 250, 255);
+    dl->AddText(ImVec2(l2_x, line2_y), up_col, g_perf_upscaler);
+    l2_x += sz_up.x;
+
+    // Remaining text of line 2 (e.g. " | 1080p → 4K | Hybrid MV | Reflex")
+    if (strlen(g_perf_line2) > strlen(g_perf_upscaler)) {
+        const char *tail = g_perf_line2 + strlen(g_perf_upscaler);
+        dl->AddText(ImVec2(l2_x, line2_y), IM_COL32(175, 190, 205, 225), tail);
+    }
 }
 
 extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const char **shot) {
