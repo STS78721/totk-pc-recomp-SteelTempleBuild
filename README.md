@@ -1,101 +1,92 @@
-# TotK Recomp — Next Gen STS Build
+# 🗡️ TotK Recomp — SteelTemple Build 🎮⚡
+### *Transforming Tears of the Kingdom into a Flagship Modern PC Experience*
 
 [![Latest Release](https://img.shields.io/github/v/release/STS78721/totk-pc-recomp-SteelTempleBuild?label=Latest%20Release&color=brightgreen)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)
 [![Release Date](https://img.shields.io/github/release-date/STS78721/totk-pc-recomp-SteelTempleBuild?color=blue)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20x86--64-informational)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild)
-[![Vulkan](https://img.shields.io/badge/Renderer-Vulkan%201.3-red)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild)
-
-**TotK Recomp: Next Gen STS Build** is an enhanced, high-performance static recompilation fork of *The Legend of Zelda: Tears of the Kingdom* (Nintendo Switch, 2023) for native Windows and Linux x86-64.
+[![Renderer](https://img.shields.io/badge/Renderer-Vulkan%201.3-red)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild)
+[![DualSense](https://img.shields.io/badge/Controller-PS5%20DualSense%20Native-blueviolet)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild)
+[![Community Feedback](https://img.shields.io/badge/Community-Feedback%20Welcome-orange)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/issues)
 
 > [!IMPORTANT]
-> **No game files are included.** You need your own legally obtained copy of *Tears of the Kingdom*, dumped from your own console: the base game and update 1.1.0, 1.2.1, or 1.4.3. The game executable is built from your files on your machine. Do not share copyrighted assets.
+> **No copyrighted game files are included.** You need your own legally obtained copy of *The Legend of Zelda: Tears of the Kingdom*, dumped from your console: base game and update **v1.4.3** (`ExeFS` / `RomFS`). The executable is compiled and linked on your local machine.
 
 ---
 
-## ⚡ What's New in Beta 3: Next Gen STS Build
+## 🌟 Our Vision: What We Want to Achieve
 
-The **Beta 3 Unified Release** (`v0.3.4-beta-3-steeltemple`) incorporates the full Intel rendering stack, advanced hardware awareness and gating for DLSS Neural Reconstruction, a zero-duplication grouped HUD overlay, 0.1% and 1% low frametime pacing metrics, industry-standard menu terminology, and architectural support for PS5 DualSense controllers:
+**TotK Recomp: SteelTemple Build** is an enthusiast-driven, high-performance static recompilation fork of *The Legend of Zelda: Tears of the Kingdom* (Nintendo Switch) for native Windows and Linux x86-64.
 
-### 🌟 Key Changes & Upgrades
-
-1. **Full Intel Stack Integration (XeSS 2.0+, XeFG, XeLL)**
-   - **Intel XeSS (Xe Super Sampling)**: High-performance AI upscaling with dedicated **XMX Matrix Hardware Acceleration** on Intel Arc GPUs and universal **DP4a** fallback vector acceleration across all vendors.
-   - **Intel XeFG (Xe Frame Generation)**: Hardware-aware frame generation with `2x`, `3x`, and `4x` multipliers, dynamically synchronized with the presentation engine.
-   - **Intel XeLL (Xe Low Latency)**: Real-time driver queue synchronization and frame pacing for Intel Arc and Iris Xe graphics.
-   - **Official Intel DLLs Bundled**: Distributed with `libxess.dll` (v2.0.2), `libxess_fg.dll` (v1.3.1), `libxell.dll` (v1.3.2), and `libxess_dx11.dll` with a resilient multi-path dynamic runtime loader.
-
-2. **DLSS Neural Reconstruction (DLSS-NR) Hardware Gating & Model Uncoupling**
-   - **Complete Uncoupling**: DLSS-NR is now fully independent of DLSS Super Resolution models and presets (`TOTK_DLSS_PRESET` and `TOTK_DLSS_NR_PRESET` operate autonomously).
-   - **Hardware Awareness & Safety Gating**: Automatically grays out DLSS-NR controls on non-NVIDIA GPUs or systems missing required DLLs (`nvngx_dlssnr.dll` / `sl.dlss_nr.dll`) with clear diagnostic badge explanations.
-   - **Preset B Optimization**: NVIDIA's fastest neural reconstruction model (`NVSDK_NGX_DLSS_Hint_Render_Preset_B`) for razor-sharp image stability with minimal frame latency.
-
-3. **Refined Zero-Duplication HUD Performance Overlay**
-   - **Logical Technology Pipeline**: Grouped seamlessly on Line 2:
-     `DLSS 4.5 · Preset M` &rarr; `[DLSS FG 6x]` (purple badge) &rarr; `[NR ACTIVE · Preset B]` (green badge) &rarr; `| 1080p -> 4K | Hybrid MV | Reflex`.
-   - **Framerate & Frame Pacing Line**: Line 1 dedicated to clean performance numbers:
-     `● 526 FPS  1% 41  0.1% 39  1.9 ms`.
-   - **Zero Repetition**: Completely eliminated duplicate grey string suffixes so every technology pill badge appears exactly once with high contrast styling.
-
-4. **0.1% and 1% Low Frametime Metrics**
-   - Added real-time tracking of 1% low and 0.1% low frametimes to both the compact overlay and the comprehensive full performance analysis table (`F1` -> Overlay: Full).
-   - Essential for detecting micro-stuttering, shader compilation hitches, and frame pacing variance.
-
-5. **Strict Dynamic DLSS vs DLAA Detection**
-   - Real-time resolution evaluation dynamically selects between **`DLSS 4.5`** (active upscaling from lower internal scene resolutions, e.g. 50% 1080p &rarr; 4K) and **`DLAA 4.5`** (native 100% resolution anti-aliasing), eliminating labeling confusion.
-
-6. **Industry-Standard Graphics Settings Terminology**
-   - Rephrased the graphics menu with intuitive, industry-standard options and clear explanations designed for average users while keeping full enthusiast control.
-
-7. **PS5 DualSense Controller Architectural Blueprint**
-   - Detailed architecture published for dynamic adaptive triggers (bow draw resistance and string snap release), 4-channel controller audio routing for archery sound effects, and automatic in-game button prompt detection (PlayStation vs Xbox vs Nintendo).
-
-8. **Cave Entrance & Interior Black Screen Flicker Elimination (Hotfix)**
-   - **Resolved Issue**: Fixed a bug where entering or approaching caves caused rapid in-and-out black screen flickering with upscalers active (both NVIDIA DLSS and AMD FSR) while the 2D HUD remained fully drawn at high framerates.
-   - **Sub-Pass Isolation**: In dark environments, TotK dispatches a half-resolution (`960x540`) pass for volumetric fog and cave interior depth. The G-buffer registration now strictly enforces the configured scene resolution (`s[0]`), completely preventing sub-resolution passes from prematurely hijacking the upscaler pipeline.
-   - **Output Target Verification**: Scaling passes are now strictly required to target output presentation resolution (`o[0]`), ensuring the final display target is never skipped or left unwritten.
-   - **Skipped-Bloom Fallback**: Added in-place fallback evaluation for DLAA in deep caves where the engine dynamically skips the bloom downsampling chain.
-
-9. **Physically Accurate Frame Generation Telemetry & Optical Flow Overhead Modeling**
-   - Implemented dual-rate cadence telemetry (`● [Net FPS] (Base [Base FPS])`) on Line 1 of the HUD.
-   - Replaced theoretical integer multipliers with real-world Optical Flow Accelerator (OFA) compute overhead modeling, matching NVIDIA FrameView, PresentMon, and RTSS.
+Our goal is not just to run the game on PC—it is to **elevate *Tears of the Kingdom* into a native, flagship PC title** that leverages the full power of modern hardware:
+- **Next-Gen Immersion:** Bridging the physical gap between player and world with native PS5 DualSense 4-channel audio streaming, dynamic adaptive trigger resistance, and voice-coil tactile feedback.
+- **State-of-the-Art Rendering:** Combining deep neural reconstruction, multi-vendor AI upscaling, and low-latency presentation pipelines for razor-sharp 4K/8K presentation at ultra-high framerates.
+- **Future-Forward Graphics:** Actively pioneering real-time lighting advancements (RTGI, Path Tracing, and modern PBR pipelines) to realize Hyrule in its most breathtaking form.
+- **A Completely Community-Guided Project:** Built for players, with players. Every design choice, trigger curve, audio filter, and visual toggle is driven by user testing, discussion, and direct feedback.
 
 ---
+
+## 🕹️ What Has Been Implemented
 
 <p align="center">
-  <img src="https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/v0.3.4-beta-3-steeltemple/totk_overlay_beta3_grouped_hud.png" alt="Beta 3 Grouped HUD Overlay" width="90%">
+  <img src="https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/v0.3.4-beta-4-steeltemple/totk_zonai_dualsense_theme.png" alt="TotK SteelTemple Next-Gen Immersion" width="85%">
 </p>
 
----
+### 1. 🎮 Native PlayStation 5 DualSense Next-Gen Immersion
+*A whole new way to play TotK on PC with full physical and auditory tactile integration:*
+- **4-Channel Audio Streaming & Controller Speaker:** Tapped straight into the game's 48 kHz audio mixer. Sound effects are high-pass filtered and routed directly to the controller's built-in speaker.
+- **Smart Interactive Audio Gating:** The speaker stays silent during peaceful exploration—music and ambient wind remain purely on your TV/display. The controller speaker fires only during Link's actions (bow draws, arrow flight, shield parries, melee clashes, explosions, chest fanfares).
+- **Studio Dynamics (+18.6 dB Gain + Analog Limiter):** High-headroom digital amplification with a continuous tape-saturation curve (`tanhf`) so subtle bowstring creaks are crisp and loud without digital clipping.
+- **Adaptive Triggers:** Progressive bowstring tension builds on Right Trigger (ZR) as you draw; when releasing, the trigger fires a mechanical recoil hammer pulse (Force 8/8) paired with 100% max dual-motor rumble and a 65 Hz voice-coil palm shockwave.
+- **Shield Parry Kickback:** When an enemy strikes Link's shield, the Left Trigger (ZL) violently hammers back with maximum force for 350 ms, physically pushing your finger off the trigger.
+- **Luminous Zonai Teal-Green Lightbar (`#20F8B8`):** Glows in Link's iconic Ultrahand magic color and gracefully restores to standard system lighting when exiting the game.
 
-## 🎮 Performance & Features Overview
+### 2. 🚀 Comprehensive AI Upscaler & Neural Reconstruction Hub
+- **Universal Multi-Vendor Upscaling:** NVIDIA DLSS 4 / 4.5 (Presets K, J, M, L, E, C), Intel XeSS 2.0+ (Hardware XMX & universal DP4a), AMD FSR 4.1.2 & FSR 1.0 (EASU + RCAS).
+- **DLSS Neural Reconstruction (DLSS-NR):** OptiScaler-style neural radiance reconstruction running on Preset B for temporal stability and fine detail. Fully uncoupled from super-resolution presets with hardware auto-gating.
+- **Accurate Dynamic Resolution:** Proper 66.7% internal scene scaling in DLSS Quality mode, strictly separated from native 100% DLAA anti-aliasing.
+- **Zero Foliage Haloing:** Eliminated unwanted forced sharpening passes on native frames, keeping grass and leaves pristine.
 
-| Feature | Supported Technologies | Key Benefits |
-| :--- | :--- | :--- |
-| **AI Upscaling** | NVIDIA DLSS 4 / 4.5 (Presets K, J, M, L, E, C), Intel XeSS 2.0+ (XMX & DP4a), AMD FSR 4.1.2 & FSR 1.0 | 4K crystal clarity from 1080p/1440p scene renders |
-| **Frame Generation** | NVIDIA DLSS FG (2x, 4x, 6x MFG), Intel XeFG (2x, 3x, 4x), AMD FSR 3.1 & FSR 4 AI FG | Up to 6x framerate multiplication with ultra-smooth motion |
-| **Neural Reconstruction** | OptiScaler-style DLSS-NR (Preset B Accelerated) | Temporal clarity, edge antialiasing, and AI radiance caching |
-| **Low Latency** | NVIDIA Reflex (`VK_NV_low_latency2`), AMD Anti-Lag 2 (`VK_AMD_anti_lag`), Intel XeLL | Minimal input lag and synchronized frame queues |
-| **Ambient Occlusion** | Intel XeGTAO, 24-Step Directional HBAO, SSAO, Native Switch AO | Realistic contact shadowing and atmospheric depth |
-| **Motion Vectors** | Depth-Guided Analytical Hybrid Motion Vectors + Debug Visualizer | Zero ghosting on Link, weapons, enemies, and arrows |
-| **HDR Calibration** | OLED HDR10 (Vivid, Clarity, Custom) with peak brightness and HUD balance | Full dynamic range on HDR monitors and OLED TVs |
+### 3. ⚡ Multi-Vendor Frame Generation & Low Latency
+- **Frame Multiplication:** Hardware-aware frame generation support across vendors (NVIDIA DLSS-G, Intel XeFG up to 4x, and AMD FSR 3.1 / FSR 4 AI FG).
+- **Minimal Input Lag:** Synchronized queue pacing with NVIDIA Reflex (`VK_NV_low_latency2`), AMD Anti-Lag 2 (`VK_AMD_anti_lag`), and Intel XeLL.
 
----
-
-## 🛠️ Quick Installation
-
-### Portable Drop-in (Existing Installations)
-1. Download **`TotK-Recomp-SteelTemple-v0.3.4-beta-3.zip`** from [Releases](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest).
-2. Extract all files (`totk.exe`, `libtotkrt.a`, and the Intel DLLs) directly into your existing `GAME` folder, replacing older files.
-3. Launch `totk.exe` and press **F1** to open the in-game settings menu!
-
-### Full Installer (New Installations)
-1. Download **`TotK-Setup-0.3.4-beta-3-steeltemple-windows.zip`** from [Releases](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest).
-2. Run `TotK-Setup.exe` and point it to your legally dumped game files.
-3. The setup will automatically build the game executable and configure all modern enhancements.
+### 4. 🎨 Ambient Occlusion, HDR & Visual Stability
+- **Contact Shadowing:** In-engine ambient occlusion choices including Intel XeGTAO, 24-step Directional HBAO, SSAO, and native Switch AO.
+- **Cave & Dark Area Flicker Elimination:** Isolated half-resolution sub-passes so volumetric cave fog never hijacks or flickers the upscaler pipeline.
+- **OLED HDR10 Calibration:** Dedicated HDR profiles (Vivid, Clarity, Custom) with peak nits and HUD brightness balancing.
+- **Clean Grouped HUD:** Two-line high-contrast performance overlay with 0.1% and 1% low frametime hitch tracking and zero repetitive wording.
 
 ---
 
-## 📜 Credits & Acknowledgments
-- **valentderah** and the original [totk-pc-recomp](https://github.com/valentderah/totk-pc-recomp) team for the revolutionary static recompilation engine.
-- **STS78721 (SteelTemple)** for lead development, Intel stack integration, DLSS-NR pipeline, hybrid motion vectors, and performance overlay architectures.
-- **NVIDIA, AMD, and Intel** for DLSS/Reflex, FSR/Anti-Lag 2, and XeSS/XeFG/XeLL developer SDKs.
+## 🗺️ The Horizon: Future Tech Roadmap 🔭
+
+We are actively exploring and prototyping new technologies to push the fidelity of *Tears of the Kingdom* even further:
+- **🌟 Real-Time Global Illumination (RTGI) & Path Tracing:** Exploring real-time ray-traced bounce lighting, accurate indirect shadows, and dynamic sky illumination across Hyrule's surface, sky islands, and depths.
+- **🔮 NVIDIA RTX Remix & Modern PBR Pipelines:** Researching spatial lighting pipelines, enhanced texture materials, and next-gen surface reflectance models.
+- **🏹 Expanded Weapon Haptics:** Building out bespoke adaptive trigger curves and voice-coil profiles for heavy two-handed crushers, rapid spear thrusts, and Zonai beam emitters.
+- **📡 Wireless DualSense Haptic Streaming:** Exploring custom low-latency wireless Bluetooth audio/haptic pipelines on PC.
+
+---
+
+## 💬 Community Feedback is Crucial — Any & All Ideas Welcome! 🤝
+
+This build exists because of the community, and **your feedback is the single most important factor shaping its development**.
+
+We want to hear from you:
+- How do the adaptive triggers feel? Too stiff, too light, or just right?
+- How is the controller speaker balance on your setup?
+- What visual features, lighting tweaks, or upscaler options would you like to see next?
+- Encountered a bug, frametime spike, or edge case?
+
+👉 **Share your thoughts, request features, or report issues directly on the [GitHub Issues tab](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/issues).**
+Every idea is welcome, whether you're a casual player enjoying Hyrule on your couch or an enthusiast pushing 4K 120 FPS!
+
+---
+
+## 📥 Quick Start & Downloads
+
+Check out the latest prebuilt packages on our **[Releases Page](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)**:
+- **Quick Drop-In (`TotK-Recomp-SteelTemple-v0.3.4-beta-4.zip`):** Extract and replace `totk.exe` and DLLs into your existing v1.4.3 game directory.
+- **Full Installer (`TotK-Setup-0.3.4-beta-4-steeltemple-windows.zip`):** Complete automated setup package for clean installations.
+
+*Thank you to all contributors, testers, and players building the ultimate Tears of the Kingdom experience!* 🗡️🛡️
