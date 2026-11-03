@@ -1,0 +1,31 @@
+#version 450
+// Motion Vector Visualizer (runtime/vk_dlaa.c): converts RG16F motion vectors into
+// standard RGB velocity diagnostic colors:
+// - Neutral Grey (0.5, 0.5, 0.5): Stationary / 0 velocity
+// - Directional Velocity: X = Red/Cyan, Y = Green/Magenta
+// Matches standard engine debug velocity rendering (UltraCam / UE5 style).
+
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D mv_tex;
+layout(binding = 1, rgba16f) uniform writeonly image2D dst_img;
+
+layout(push_constant) uniform P {
+    vec2 size;     // output image size (ow, oh)
+    float scale;   // visualization sensitivity multiplier
+    float pad;
+} pc;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y)) return;
+
+    vec2 uv = (vec2(p) + 0.5) / pc.size;
+    vec2 mv = textureLod(mv_tex, uv, 0.0).xy;
+
+    float s = pc.scale > 0.0 ? pc.scale : 0.06;
+    vec2 v = clamp(mv * s + 0.5, 0.0, 1.0);
+    float mag = clamp(length(mv) * s * 1.5, 0.0, 1.0);
+    vec3 col = vec3(v.x, v.y, 0.5 + 0.5 * (1.0 - mag));
+
+    imageStore(dst_img, p, vec4(col, 1.0));
+}

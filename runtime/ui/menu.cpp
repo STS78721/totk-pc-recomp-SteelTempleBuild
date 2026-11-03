@@ -863,13 +863,15 @@ static void tab_dlss_nr(float scale) {
     };
     opt_choice_list("TOTK_DLSS_NR_PRESET", UI_MENU_DLSS_NR_PRESET, nr_preset_vals, nr_preset_names, 5, UI_MENU_DLSS_NR_PRESET_DESC);
 
-    static const char *const nr_model_vals[] = {"transformer_gen3", "transformer_gen2", "auto"};
+    static const char *const nr_model_vals[] = {"preset_b", "preset_a", "transformer_gen3", "transformer_gen2", "auto"};
     static const char *const nr_model_names[] = {
+        "Preset B (Fast Neural Model - Strongly Recommended)",
+        "Preset A (Standard Neural Model)",
         "Transformer Gen 3 (DLSS 5 Neural Core)",
         "Transformer Gen 2 (DLSS 4.5 Core)",
         "Automatic Selection"
     };
-    opt_choice_list("TOTK_DLSS_NR_MODEL", UI_MENU_DLSS_NR_MODEL, nr_model_vals, nr_model_names, 3, UI_MENU_DLSS_NR_MODEL_DESC);
+    opt_choice_list("TOTK_DLSS_NR_MODEL", UI_MENU_DLSS_NR_MODEL, nr_model_vals, nr_model_names, 5, UI_MENU_DLSS_NR_MODEL_DESC);
 
     static const char *const cache_vals[] = {"realtime", "high", "off"};
     static const char *const cache_names[] = {"Real-Time AI Radiance Caching", "High-Density Radiance Caching", "Off"};
@@ -889,6 +891,9 @@ static void tab_dlss_nr(float scale) {
     static const char *const stat_vals[] = {"info"};
     const char *stat_names[] = {status_str};
     opt_choice_list("##nr_status", UI_MENU_DLSS_NR_STATUS, stat_vals, stat_names, 1, UI_MENU_DLSS_NR_STATUS_DESC);
+
+    opt_group(UI_MENU_MV_DEBUG);
+    opt_toggle("TOTK_MV_DEBUG", UI_MENU_MV_DEBUG, UI_MENU_MV_DEBUG_DESC);
 
     opt_end();
 }

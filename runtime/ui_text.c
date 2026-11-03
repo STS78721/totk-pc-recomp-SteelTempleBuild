@@ -184,6 +184,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_DLSS_NR_SHARPNESS_DESC] = "Adjusts neural edge definition and micro-contrast enhancement (0 to 100 %).",
     [UI_MENU_DLSS_NR_STATUS] = "Streamline DLSS-NR plugin",
     [UI_MENU_DLSS_NR_STATUS_DESC] = "Status of the Streamline DLSS-NR plugin in the GAME directory.",
+    [UI_MENU_MV_DEBUG] = "Motion Vector Visualizer (Debug)",
+    [UI_MENU_MV_DEBUG_DESC] = "Visualizes live 2D motion vectors on screen (red/green velocity vectors, grey stationary). "
+                              "Confirms analytical camera and dynamic actor (Link, enemies) motion vector tracking.",
 
     [UI_MENU_FPS_LIMIT] = "Frame rate limit",
     [UI_MENU_FPS_LIMIT_DESC] = "The most frames per second the game draws. Above 60 is experimental and needs Game speed "

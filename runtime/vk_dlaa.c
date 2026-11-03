@@ -24,6 +24,7 @@
 #include "vk_exec.h"
 #include "vk_rec.h"
 #include "dlaa_mv_spv.h"
+#include "mv_viz_spv.h"
 
 typedef int NgxResult;   // NVSDK_NGX_Result: 1 success, 0xBAD00000 | n failures
 #define NGX_OK(r) (((unsigned)(r) & 0xFFF00000u) != 0xBAD00000u)
@@ -255,12 +256,16 @@ static struct {
     VkPipeline mv_pipe;
     VkSampler mv_samp;
     int mv_ok;                   // -1 not built, 0 failed, 1 ready
+    VkDescriptorSetLayout viz_dsl;
+    VkPipelineLayout viz_layout;
+    VkPipeline viz_pipe;
+    int viz_ok;                  // -1 not built, 0 failed, 1 ready
     uint64_t mv_frames, mv_none;
     uint64_t why[3];             // history resets: scene size changed, no camera, scene target changed
     int on;                      // the dlaa setting, read at each present (the menu switches it live)
     int scaler_skipped;          // this frame: the game's scaling draw over DLSS's picture was skipped
     uint64_t scaler_missed;      // frames DLSS scaled whose scaling draw was not found (vk_dlaa_skip_draw)
-} D = {.mv_ok = -1};
+} D = {.mv_ok = -1, .viz_ok = -1};
 
 static int dl_active(void) { return N.available && !D.failed && D.on; }
 
@@ -467,6 +472,36 @@ static int mv_pass(VkCommandBuffer cb, const struct Size *e, VkImageView zv, VkI
     return 1;
 }
 
+static int viz_init(void) {
+    if (D.viz_ok >= 0) return D.viz_ok;
+    D.viz_ok = 0;
+    const VkCtx *c = vk_ctx();
+    VkDescriptorSetLayoutBinding b[2] = {
+        {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}};
+    VkDescriptorSetLayoutCreateInfo dci = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                                           .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+                                           .bindingCount = 2, .pBindings = b};
+    VkPushConstantRange pr = {VK_SHADER_STAGE_COMPUTE_BIT, 0, 16};
+    VkShaderModuleCreateInfo mi = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = sizeof mv_viz_spv,
+                                   .pCode = mv_viz_spv};
+    VkShaderModule m = VK_NULL_HANDLE;
+    if (vkCreateDescriptorSetLayout(c->device, &dci, NULL, &D.viz_dsl) != VK_SUCCESS) return 0;
+    VkPipelineLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
+                                     .pSetLayouts = &D.viz_dsl, .pushConstantRangeCount = 1, .pPushConstantRanges = &pr};
+    if (vkCreatePipelineLayout(c->device, &li, NULL, &D.viz_layout) != VK_SUCCESS ||
+        vkCreateShaderModule(c->device, &mi, NULL, &m) != VK_SUCCESS)
+        return 0;
+    VkComputePipelineCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+                                      .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                                                .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = m, .pName = "main"},
+                                      .layout = D.viz_layout};
+    VkResult r = vkCreateComputePipelines(c->device, VK_NULL_HANDLE, 1, &ci, NULL, &D.viz_pipe);
+    vkDestroyShaderModule(c->device, m, NULL);
+    if (r != VK_SUCCESS) return 0;
+    return D.viz_ok = 1;
+}
+
 // ---------------------------------------------------------------- jitter
 // The scene's draws (every pass drawing with the scene depth, until the DLAA point) have their viewport moved by a
 // sub-pixel Halton(2,3) offset, which shifts what they rasterise as a jittered projection would; full-screen passes
@@ -513,9 +548,13 @@ static int perf_quality(uint32_t w, uint32_t ow) {
 
 // TOTK_DLSS_PRESET: the NGX render preset hint (the neural model). Values are NVSDK_NGX_DLSS_Hint_Render_Preset.
 static int preset_value(void) {
+    if (cfg_bool("TOTK_DLSS_NR")) {
+        // DLSS-NR: Force Preset B (Fast Neural Model) for lightning-fast neural reconstruction
+        return 2; // NVSDK_NGX_DLSS_Hint_Render_Preset_B
+    }
     static const struct { const char *name; int v; } t[] = {
         {"preset_k", 11}, {"preset_j", 10}, {"preset_m", 13}, {"preset_l", 12}, {"preset_e", 5}, {"preset_c", 3},
-        {"default", 0}};
+        {"preset_b", 2}, {"preset_a", 1}, {"default", 0}};
     const char *s = cfg_value("TOTK_DLSS_PRESET");
     for (size_t i = 0; s && i < sizeof t / sizeof *t; i++)
         if (!strcmp(s, t[i].name)) return t[i].v;
@@ -523,6 +562,7 @@ static int preset_value(void) {
 }
 
 static const char *dlss_gen_name(int pv, int is_upscale) {
+    if (pv == 2) return is_upscale ? "NVIDIA DLSS-NR (Preset B Fast Neural Model)" : "NVIDIA DLAA-NR (Preset B Fast Neural Model)";
     if (pv == 12 || pv == 13) return is_upscale ? "NVIDIA DLSS 4.5 (Transformer 2)" : "NVIDIA DLAA 4.5 (Transformer 2)";
     if (pv == 11 || pv == 10) return is_upscale ? "NVIDIA DLSS 4 (Transformer 1)" : "NVIDIA DLAA 4 (Transformer 1)";
     if (pv == 5 || pv == 3) return is_upscale ? "NVIDIA DLSS 3 (CNN)" : "NVIDIA DLAA 3 (CNN)";
@@ -615,6 +655,21 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     D.reset = 0;
     D.last = e, e->used = D.evals + 1;
     full_barrier(cb);
+    if (cfg_bool("TOTK_MV_DEBUG") && viz_init()) {
+        VkDescriptorImageInfo mvi = {D.mv_samp, e->mv_view, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo outi = {VK_NULL_HANDLE, e->out_view, VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet wr[2] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &mvi},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .pImageInfo = &outi}};
+        vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, D.viz_pipe);
+        rec_push(vk_pipeline_push_fn(), cb, VK_PIPELINE_BIND_POINT_COMPUTE, D.viz_layout, 0, 2, wr);
+        float pc[4] = {(float)ow, (float)oh, 0.08f, 0.0f};
+        vkCmdPushConstants(cb, D.viz_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+        vkCmdDispatch(cb, (ow + 7) / 8, (oh + 7) / 8, 1);
+        full_barrier(cb);
+    }
     // the result into the scene target (DLAA: the bloom, the post passes and the HUD read it and draw over it) or into
     // the scaling pass's target (the HUD draws over it)
     VkImageBlit b = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
