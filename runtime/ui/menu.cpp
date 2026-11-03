@@ -1501,7 +1501,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     // the port version and the game update, right-aligned on the title line: what a bug report needs first
     char game[16], version[128], pver[64];
     snprintf(game, sizeof game, "%d.%d.%d", rt_game_version / 100, rt_game_version / 10 % 10, rt_game_version % 10);
-    snprintf(pver, sizeof pver, "%s-exp-dlssnr (Next Gen STS Build)", rt_port_version);
+    snprintf(pver, sizeof pver, "%s-beta-3-hotfix (Next Gen STS Build)", rt_port_version);
     snprintf(version, sizeof version, menu_text(UI_MENU_VERSION), pver, game);
     ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(version).x);
     ImGui::TextDisabled("%s", version);
@@ -1781,10 +1781,13 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 g_perf_nr_badge[0] = 0;
             }
 
-            // Real-time resolution check
+            // Real-time resolution check + preset fallback
             unsigned out[2], scene[2];
             res_sizes(out, scene);
-            bool is_upscale = (scene[0] > 0 && out[0] > 0 && scene[0] < out[0]);
+            const char *preset_mode = cfg_value("TOTK_UPSCALER_PRESET");
+            bool preset_is_scaling = preset_mode && strcmp(preset_mode, "native") != 0;
+            bool is_upscale = (scene[0] > 0 && out[0] > 0) ? (scene[0] < out[0]) : preset_is_scaling;
+            if (is_dlss && preset_mode && !strcmp(preset_mode, "native")) is_upscale = false;
 
             // Compact upscaler text (saves screen width)
             if (is_dlss || is_dlaa) {
