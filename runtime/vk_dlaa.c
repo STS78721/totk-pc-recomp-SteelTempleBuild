@@ -547,13 +547,8 @@ static int perf_quality(uint32_t w, uint32_t ow) {
 }
 
 // TOTK_DLSS_PRESET: the NGX render preset hint (the neural model). Values are NVSDK_NGX_DLSS_Hint_Render_Preset.
+// Completely uncoupled from DLSS-NR: DLSS SR uses its own chosen preset (Preset K, M, L, J, etc.).
 static int preset_value(void) {
-    if (cfg_bool("TOTK_DLSS_NR")) {
-        const char *nr_p = cfg_value("TOTK_DLSS_NR_PRESET");
-        if (nr_p && !strcmp(nr_p, "preset_a")) return 1;
-        // DLSS-NR: Force Preset B (Fast Neural Model) for lightning-fast neural rendering
-        return 2; // NVSDK_NGX_DLSS_Hint_Render_Preset_B
-    }
     static const struct { const char *name; int v; } t[] = {
         {"preset_k", 11}, {"preset_j", 10}, {"preset_m", 13}, {"preset_l", 12}, {"preset_e", 5}, {"preset_c", 3},
         {"preset_b", 2}, {"preset_a", 1}, {"default", 0}};
@@ -568,13 +563,10 @@ uint64_t vk_dlss_nr_dispatches(void) {
 }
 
 static const char *dlss_gen_name(int pv, int is_upscale) {
-    if (cfg_bool("TOTK_DLSS_NR")) {
-        return "NVIDIA DLSS Neural Rendering (DLSS-NR Pre-SR | Preset B Fast Model)";
-    }
-    if (pv == 2) return is_upscale ? "NVIDIA DLSS (Preset B Fast Model)" : "NVIDIA DLAA (Preset B Fast Model)";
     if (pv == 12 || pv == 13) return is_upscale ? "NVIDIA DLSS 4.5 (Transformer 2)" : "NVIDIA DLAA 4.5 (Transformer 2)";
     if (pv == 11 || pv == 10) return is_upscale ? "NVIDIA DLSS 4 (Transformer 1)" : "NVIDIA DLAA 4 (Transformer 1)";
     if (pv == 5 || pv == 3) return is_upscale ? "NVIDIA DLSS 3 (CNN)" : "NVIDIA DLAA 3 (CNN)";
+    if (pv == 2) return is_upscale ? "NVIDIA DLSS (Preset B)" : "NVIDIA DLAA (Preset B)";
     return is_upscale ? "NVIDIA DLSS (Auto)" : "NVIDIA DLAA (Auto)";
 }
 

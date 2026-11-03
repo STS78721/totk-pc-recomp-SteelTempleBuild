@@ -1741,13 +1741,15 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             uint64_t nr_disp = vk_dlss_nr_dispatches();
             g_perf_nr_active = (is_nr && nr_disp > 0);
 
+            // DLSS-NR is completely uncoupled: update its own badge independently
             if (is_nr) {
-                g_perf_theme = 0;
-                const char *nr_preset = cfg_value("TOTK_DLSS_NR_PRESET");
-                const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "Preset B" : nr_preset;
-                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "DLSS-NR · %s", pr_display);
                 snprintf(g_perf_nr_badge, sizeof g_perf_nr_badge, nr_disp > 0 ? "NR ACTIVE" : "NR READY");
-            } else if (is_dlss || is_dlaa) {
+            } else {
+                g_perf_nr_badge[0] = 0;
+            }
+
+            // Upscaler identity & presets are preserved regardless of DLSS-NR state
+            if (is_dlss || is_dlaa) {
                 g_perf_theme = 0;
                 const char *preset = cfg_value("TOTK_DLSS_PRESET");
                 char pbuf[32];
@@ -1757,7 +1759,6 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                     snprintf(pbuf, sizeof pbuf, "Preset %c", c);
                 } else snprintf(pbuf, sizeof pbuf, "%s", preset && preset[0] ? preset : "Preset M");
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s · %s", is_dlaa ? "DLAA 4.5" : "DLSS 4.5", pbuf);
-                g_perf_nr_badge[0] = 0;
             } else if (is_xess) {
                 g_perf_theme = 3;
                 const char *xq = cfg_value("TOTK_XESS_QUALITY");
@@ -1770,21 +1771,17 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                                       : !strcmp(xq, "aa") ? "Native AA" : "Quality";
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "Intel XeSS · %s (%s)", mode_name,
                          vk_xess_is_xmx() ? "XMX" : "DP4a");
-                g_perf_nr_badge[0] = 0;
             } else if (is_fsr4) {
                 g_perf_theme = 1;
                 int s = cfg_int("TOTK_SHARPNESS");
                 s = s < 0 ? 0 : s > 100 ? 100 : s;
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "FSR 4.1.2 · %d%%", s < 68 ? 68 : s);
-                g_perf_nr_badge[0] = 0;
             } else if (is_fsr) {
                 g_perf_theme = 1;
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "AMD FSR 1.0");
-                g_perf_nr_badge[0] = 0;
             } else {
                 g_perf_theme = 2;
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "Native");
-                g_perf_nr_badge[0] = 0;
             }
 
             // Line 2: Upscaler + Resolution scale + Hybrid MV + Reflex/XeLL
@@ -1793,6 +1790,13 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             char line2[128];
             snprintf(line2, sizeof line2, "%s", g_perf_upscaler);
 
+            if (is_nr) {
+                const char *nr_preset = cfg_value("TOTK_DLSS_NR_PRESET");
+                const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "Preset B" : nr_preset;
+                char nr_buf[48];
+                snprintf(nr_buf, sizeof nr_buf, " | NR %s", pr_display);
+                strncat(line2, nr_buf, sizeof(line2) - strlen(line2) - 1);
+            }
             if (scene[0] > 0 && out[0] > 0 && scene[0] < out[0]) {
                 char res_buf[32];
                 if (out[1] == 2160 && scene[1] == 1080) snprintf(res_buf, sizeof res_buf, " | 1080p -> 4K");
@@ -1906,19 +1910,18 @@ static void perf_picture(const MenuTarget *t, const ImVec4 &c) {
         n++;
     }
 
-    // Scaling / Upscaler
+    // Scaling / Upscaler (Always reports the real upscaler engine & model)
     const char *up = cfg_value("TOTK_UPSCALER");
     int s = cfg_int("TOTK_SHARPNESS");
     s = s < 0 ? 0 : s > 100 ? 100 : s;
     rows[n].label_str = nullptr;
     rows[n].label_id = UI_MENU_OV_SCALING;
-    if (cfg_bool("TOTK_DLSS_NR")) {
-        const char *nr_preset = cfg_value("TOTK_DLSS_NR_PRESET");
-        const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "Preset B" : nr_preset;
-        snprintf(rows[n].val, sizeof rows[n].val, "NVIDIA DLSS-NR (%s Fast Model)", pr_display);
-    } else if (!strcmp(up, "dlss") || cfg_bool("TOTK_DLAA")) {
+    if (!strcmp(up, "dlss") || cfg_bool("TOTK_DLAA")) {
         snprintf(rows[n].val, sizeof rows[n].val, "%s (%s)", scene[0] < out[0] ? "NVIDIA DLSS 4.5" : "NVIDIA DLAA",
                  cfg_value("TOTK_DLSS_PRESET"));
+    } else if (!strcmp(up, "xess")) {
+        snprintf(rows[n].val, sizeof rows[n].val, "Intel XeSS (%s | %s)", cfg_value("TOTK_XESS_QUALITY"),
+                 vk_xess_is_xmx() ? "XMX" : "DP4a");
     } else if (!strcmp(up, "fsr4")) {
         snprintf(rows[n].val, sizeof rows[n].val, "AMD FSR 4.1.2 (sharp %d%%)", s < 68 ? 68 : s);
     } else if (!strcmp(up, "fsr") && (scene[0] < out[0] || t->scaler == 2)) {
