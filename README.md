@@ -49,10 +49,14 @@ The **Beta 2 Unified Release** (`v0.3.4-beta-2-steeltemple`) consolidates all ex
    - **AMD Anti-Lag 2** native pipeline (`VK_AMD_anti_lag`): In-engine frame pacing and driver queue synchronization to eliminate input lag during frame generation.
 
 8. **Next Gen STS Interface & Tab Overhaul**
-   - Rebranded header: `TotK Recomp 0.3.4-beta-2 (Next Gen STS Build)`.
-   - Dedicated **Graphics Settings** tab (formerly Screen tab) organizing resolution, upscaling, ambient occlusion, and display options.
-   - Dedicated **DLSS NR** tab previewing DLSS 5 Neural Rendering controls and Preset B acceleration.
+   - Rebranded header: `TotK Recomp 0.3.4-exp-dlssnr (Next Gen STS Build)`.
+   - Dedicated **Graphics Settings** tab organizing resolution, upscaling, ambient occlusion, and display options.
+   - Dedicated **DLSS NR** tab featuring OptiScaler-style neural rendering controls, forced Preset B acceleration, and live GPU pipeline status telemetry.
    - Full OLED HDR10 calibration (`Vivid`, `Clarity`, `Custom`) with dynamic peak brightness, game exposure, and HUD white point sliders.
+
+<p align="center">
+  <img src="https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/v0.3.4-beta-2-steeltemple/totk_menu_beta2_nextgen_sts.png" alt="Next Gen STS DLSS NR Settings Menu" width="85%">
+</p>
 
 ---
 
