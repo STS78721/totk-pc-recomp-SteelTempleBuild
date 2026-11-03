@@ -12,104 +12,80 @@
 
 ---
 
-## ⚡ What's New in Beta 2: Next Gen STS Build
+## ⚡ What's New in Beta 3: Next Gen STS Build
 
-The **Beta 2 Unified Release** (`v0.3.4-beta-2-steeltemple`) consolidates all experimental and cutting-edge features developed across previous alpha/beta iterations into a rock-solid, production-ready build:
+The **Beta 3 Unified Release** (`v0.3.4-beta-3-steeltemple`) incorporates the full Intel rendering stack, advanced hardware awareness and gating for DLSS Neural Reconstruction, a zero-duplication grouped HUD overlay, 0.1% and 1% low frametime pacing metrics, industry-standard menu terminology, and architectural support for PS5 DualSense controllers:
 
 ### 🌟 Key Changes & Upgrades
 
-1. **Clean Removal of Experimental RTGI & Ray Reconstruction**
-   - Stripped unpolished screen-space/BVH ray-traced global illumination shaders and ray reconstruction denoisers.
-   - Eliminates temporal ghosting, firefly noise, edge boiling, and frame pacing stutter.
-   - Provides pure, pristine image fidelity and flawless frame consistency across all GPU architectures.
+1. **Full Intel Stack Integration (XeSS 2.0+, XeFG, XeLL)**
+   - **Intel XeSS (Xe Super Sampling)**: High-performance AI upscaling with dedicated **XMX Matrix Hardware Acceleration** on Intel Arc GPUs and universal **DP4a** fallback vector acceleration across all vendors.
+   - **Intel XeFG (Xe Frame Generation)**: Hardware-aware frame generation with `2x`, `3x`, and `4x` multipliers, dynamically synchronized with the presentation engine.
+   - **Intel XeLL (Xe Low Latency)**: Real-time driver queue synchronization and frame pacing for Intel Arc and Iris Xe graphics.
+   - **Official Intel DLLs Bundled**: Distributed with `libxess.dll` (v2.0.2), `libxess_fg.dll` (v1.3.1), `libxell.dll` (v1.3.2), and `libxess_dx11.dll` with a resilient multi-path dynamic runtime loader.
 
-2. **Intel XeGTAO (Ground Truth Ambient Occlusion)**
-   - Integrated full Intel XeGTAO high-performance ground-truth ambient occlusion alongside SSAO, HBAO, and Native Switch AO.
-   - Micro-shadowing depth and contact shadow realism with negligible GPU overhead.
+2. **DLSS Neural Reconstruction (DLSS-NR) Hardware Gating & Model Uncoupling**
+   - **Complete Uncoupling**: DLSS-NR is now fully independent of DLSS Super Resolution models and presets (`TOTK_DLSS_PRESET` and `TOTK_DLSS_NR_PRESET` operate autonomously).
+   - **Hardware Awareness & Safety Gating**: Automatically grays out DLSS-NR controls on non-NVIDIA GPUs or systems missing required DLLs (`nvngx_dlssnr.dll` / `sl.dlss_nr.dll`) with clear diagnostic badge explanations.
+   - **Preset B Optimization**: NVIDIA's fastest neural reconstruction model (`NVSDK_NGX_DLSS_Hint_Render_Preset_B`) for razor-sharp image stability with minimal frame latency.
 
-3. **Depth-Guided Hybrid Motion Vectors & Live Visualizer**
-   - **Per-Object Velocity Tracking**: Hybrid motion vector engine combining 100% exact analytical camera reprojection for static scenery with depth-guided temporal disocclusion tracking for dynamic actors (Link running, swinging weapons, charging enemies, flying arrows).
-   - **Eliminates Ghosting**: Supplies NVIDIA DLSS with complete character-level motion vectors, completely eliminating the temporal ghosting, smearing, and trailing typical of camera-only implementations.
-   - **Live Motion Vector Visualizer**: Built-in debug renderer (`TOTK_MV_DEBUG=1` or menu switch) mapping 2D velocities to standard diagnostic RGB colors (neutral grey stationary, vivid red/green/cyan directional vectors) to visually verify character tracking in real time.
+3. **Refined Zero-Duplication HUD Performance Overlay**
+   - **Logical Technology Pipeline**: Grouped seamlessly on Line 2:
+     `DLSS 4.5 · Preset M` &rarr; `[DLSS FG 6x]` (purple badge) &rarr; `[NR ACTIVE · Preset B]` (green badge) &rarr; `| 1080p -> 4K | Hybrid MV | Reflex`.
+   - **Framerate & Frame Pacing Line**: Line 1 dedicated to clean performance numbers:
+     `● 526 FPS  1% 41  0.1% 39  1.9 ms`.
+   - **Zero Repetition**: Completely eliminated duplicate grey string suffixes so every technology pill badge appears exactly once with high contrast styling.
 
-4. **NVIDIA DLSS-NR Integration with Forced Preset B**
-   - **Streamline DLSS-NR (`sl.dlss_nr.dll`)**: Dedicated in-game menu tab with neural reconstruction, real-time AI radiance caching, and micro-contrast sliders.
-   - **Forced Preset B**: Automatically engages NVIDIA's fast neural model (`NVSDK_NGX_DLSS_Hint_Render_Preset_B`), providing a substantial frame time reduction and higher frame rates compared to previous model iterations without compromising clarity.
+4. **0.1% and 1% Low Frametime Metrics**
+   - Added real-time tracking of 1% low and 0.1% low frametimes to both the compact overlay and the comprehensive full performance analysis table (`F1` -> Overlay: Full).
+   - Essential for detecting micro-stuttering, shader compilation hitches, and frame pacing variance.
 
-5. **Unified Guided Upscaler Engine**
-   - **NVIDIA DLSS 4 / 4.5**: Next-generation Transformer neural network models (Presets `K`, `J`, `M`, `L`) and DLSS 3 CNN models (Presets `E`, `C`) with DLAA support.
-   - **AMD FidelityFX Super Resolution**: Modern FSR 4.1.2 context-aware neural pipeline and FSR 1.0 spatial upscaler for universal hardware support.
+5. **Strict Dynamic DLSS vs DLAA Detection**
+   - Real-time resolution evaluation dynamically selects between **`DLSS 4.5`** (active upscaling from lower internal scene resolutions, e.g. 50% 1080p &rarr; 4K) and **`DLAA 4.5`** (native 100% resolution anti-aliasing), eliminating labeling confusion.
 
-6. **Multi-Frame Generation Hub**
-   - **NVIDIA DLSS Frame Generation**: Full optical flow and motion-vector frame interpolation (`2x`), with Multi-Frame Generation (`4x` and `6x` MFG) hardware-gated to RTX 50-series GPUs.
-   - **AMD FSR 3.1 & FSR 4 AI Frame Generation**: High-performance frame interpolation optimized across modern Radeon cards (including RX 9070 XT, RX 7900 XTX, and RDNA 3/4).
+6. **Industry-Standard Graphics Settings Terminology**
+   - Rephrased the graphics menu with intuitive, industry-standard options and clear explanations designed for average users while keeping full enthusiast control.
 
-7. **Ultra-Low Latency Synchronization**
-   - **NVIDIA Reflex** native integration (`VK_NV_low_latency2`): `Off`, `On`, and `On + Boost`.
-   - **AMD Anti-Lag 2** native pipeline (`VK_AMD_anti_lag`): In-engine frame pacing and driver queue synchronization to eliminate input lag during frame generation.
+7. **PS5 DualSense Controller Architectural Blueprint**
+   - Detailed architecture published for dynamic adaptive triggers (bow draw resistance and string snap release), 4-channel controller audio routing for archery sound effects, and automatic in-game button prompt detection (PlayStation vs Xbox vs Nintendo).
 
-8. **Next Gen STS Interface & Tab Overhaul**
-   - Rebranded header: `TotK Recomp 0.3.4-exp-dlssnr (Next Gen STS Build)`.
-   - Dedicated **Graphics Settings** tab organizing resolution, upscaling, ambient occlusion, and display options.
-   - Dedicated **DLSS NR** tab featuring OptiScaler-style neural rendering controls, forced Preset B acceleration, and live GPU pipeline status telemetry.
-   - Full OLED HDR10 calibration (`Vivid`, `Clarity`, `Custom`) with dynamic peak brightness, game exposure, and HUD white point sliders.
+---
 
 <p align="center">
-  <img src="https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/v0.3.4-beta-2-steeltemple/totk_menu_beta2_nextgen_sts.png" alt="Next Gen STS DLSS NR Settings Menu" width="85%">
+  <img src="https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/v0.3.4-beta-3-steeltemple/totk_overlay_beta3_grouped_hud.png" alt="Beta 3 Grouped HUD Overlay" width="90%">
 </p>
 
 ---
 
-## 📦 Download & Installation
+## 🎮 Performance & Features Overview
 
-Visit the **[Latest Beta 2 Release Page](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)** to download:
-
-- **`TotK-Setup-0.3.4-beta-2-steeltemple-windows.zip`**: Full automated graphical installer with Vulkan shader pre-compilation.
-- **`TotK-Recomp-SteelTemple-v0.3.4-beta-2.zip`**: Drop-in archive containing `totk.exe`, `totk-rt.dll`, configurations, and DLL loaders.
-- **`totk_recomp_beta_2_unified.patch`**: Full developer patch for building from source.
-
-### 🔌 DLL Guide for DLSS & FSR Features
-
-To activate hardware-accelerated NVIDIA DLSS / Reflex / Frame Generation and AMD FSR, place the official vendor libraries directly in the game folder next to `totk.exe`:
-
-#### NVIDIA Streamline DLLs
-- Download from NVIDIA's official repository: [NVIDIA Streamline GitHub](https://github.com/NVIDIAGameWorks/Streamline/releases)
-- Required files in root game folder:
-  ```text
-  sl.interposer.dll   (Streamline Interposer)
-  sl.dlss.dll         (DLSS 4 / 4.5 Super Resolution)
-  sl.dlss_g.dll       (DLSS Frame Generation)
-  sl.reflex.dll       (NVIDIA Reflex Low Latency)
-  sl.dlss_nr.dll      (DLSS Neural Rendering preview)
-  ```
-
-#### AMD FidelityFX DLLs
-- Download from GPUOpen: [GPUOpen FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/releases)
-- Required files in root game folder:
-  ```text
-  amd_fidelityfx_dx12.dll / amd_fidelityfx_vk.dll
-  fsr4_upscaler.dll
-  ```
-
-> [!NOTE]
-> Detailed extraction instructions, directory hierarchy, and checksums are provided in our [DLL Installation Guide](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/v0.3.4-beta-2-steeltemple).
+| Feature | Supported Technologies | Key Benefits |
+| :--- | :--- | :--- |
+| **AI Upscaling** | NVIDIA DLSS 4 / 4.5 (Presets K, J, M, L, E, C), Intel XeSS 2.0+ (XMX & DP4a), AMD FSR 4.1.2 & FSR 1.0 | 4K crystal clarity from 1080p/1440p scene renders |
+| **Frame Generation** | NVIDIA DLSS FG (2x, 4x, 6x MFG), Intel XeFG (2x, 3x, 4x), AMD FSR 3.1 & FSR 4 AI FG | Up to 6x framerate multiplication with ultra-smooth motion |
+| **Neural Reconstruction** | OptiScaler-style DLSS-NR (Preset B Accelerated) | Temporal clarity, edge antialiasing, and AI radiance caching |
+| **Low Latency** | NVIDIA Reflex (`VK_NV_low_latency2`), AMD Anti-Lag 2 (`VK_AMD_anti_lag`), Intel XeLL | Minimal input lag and synchronized frame queues |
+| **Ambient Occlusion** | Intel XeGTAO, 24-Step Directional HBAO, SSAO, Native Switch AO | Realistic contact shadowing and atmospheric depth |
+| **Motion Vectors** | Depth-Guided Analytical Hybrid Motion Vectors + Debug Visualizer | Zero ghosting on Link, weapons, enemies, and arrows |
+| **HDR Calibration** | OLED HDR10 (Vivid, Clarity, Custom) with peak brightness and HUD balance | Full dynamic range on HDR monitors and OLED TVs |
 
 ---
 
-## 🔬 Testing & Roadmap
+## 🛠️ Quick Installation
 
-> [!NOTE]
-> **Active Beta Mode**: This release is actively being benchmarked across diverse hardware platforms (Intel, AMD, NVIDIA, handhelds, and desktops) 24/7. Feedback, bug reports, and performance logs are welcome in the [Issues tab](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/issues).
+### Portable Drop-in (Existing Installations)
+1. Download **`TotK-Recomp-SteelTemple-v0.3.4-beta-3.zip`** from [Releases](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest).
+2. Extract all files (`totk.exe`, `libtotkrt.a`, and the Intel DLLs) directly into your existing `GAME` folder, replacing older files.
+3. Launch `totk.exe` and press **F1** to open the in-game settings menu!
 
-### Coming Soon:
-- **DLSS 5 Neural Rendering (DLSS-NR)**: Full radiance cache reconstruction and transformer-driven lighting stability.
-- **Intel Xe Suite**: Dynamic runtime support for Intel XeSS upscaling (`libxess.dll`), XeLL (Xe Low Latency), and XeFG (Xe Frame Generation).
-- **VRR Enhancement**: Adaptive sync frame pacing optimization for high-refresh G-Sync and FreeSync panels.
+### Full Installer (New Installations)
+1. Download **`TotK-Setup-0.3.4-beta-3-steeltemple-windows.zip`** from [Releases](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest).
+2. Run `TotK-Setup.exe` and point it to your legally dumped game files.
+3. The setup will automatically build the game executable and configure all modern enhancements.
 
 ---
 
-## 🛠️ Credits & Attribution
-
-- **valentderah** and the **TotK Recomp Community**: For the foundational static recompilation engine and Vulkan graphics backend.
-- **STS78721**: Next Gen STS Build fork engineering, DLSS/FSR pipeline integration, XeGTAO implementation, and UI development.
-- **Nintendo**: Creators of *The Legend of Zelda: Tears of the Kingdom*. All game copyrights belong to Nintendo.
+## 📜 Credits & Acknowledgments
+- **valentderah** and the original [totk-pc-recomp](https://github.com/valentderah/totk-pc-recomp) team for the revolutionary static recompilation engine.
+- **STS78721 (SteelTemple)** for lead development, Intel stack integration, DLSS-NR pipeline, hybrid motion vectors, and performance overlay architectures.
+- **NVIDIA, AMD, and Intel** for DLSS/Reflex, FSR/Anti-Lag 2, and XeSS/XeFG/XeLL developer SDKs.
