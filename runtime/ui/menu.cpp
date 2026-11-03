@@ -1611,9 +1611,9 @@ static char g_perf_text[96];
 static char g_perf_fps_num[32];
 static char g_perf_ms_num[32];
 static char g_perf_upscaler[64];
-static char g_perf_line2[128];
+static char g_perf_line2[160];
 static char g_perf_fg_badge[32];
-static char g_perf_nr_badge[32];
+static char g_perf_nr_badge[48];
 static int  g_perf_theme;                // 0: NVIDIA green, 1: AMD red, 2: Cyber cyan, 3: Intel blue
 static bool g_perf_nr_active;
 static uint32_t g_dt_ring[1000];
@@ -1747,9 +1747,11 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             uint64_t nr_disp = vk_dlss_nr_dispatches();
             g_perf_nr_active = (is_nr && nr_disp > 0);
 
-            // DLSS-NR is completely uncoupled: update its own badge independently
+            // DLSS-NR model preset: displayed right next to NR Active on both Line 1 badge and Line 2
+            const char *nr_preset = cfg_value("TOTK_DLSS_NR_PRESET");
+            const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "Preset B" : nr_preset;
             if (is_nr) {
-                snprintf(g_perf_nr_badge, sizeof g_perf_nr_badge, nr_disp > 0 ? "NR ACTIVE" : "NR READY");
+                snprintf(g_perf_nr_badge, sizeof g_perf_nr_badge, nr_disp > 0 ? "NR ACTIVE · %s" : "NR READY · %s", pr_display);
             } else {
                 g_perf_nr_badge[0] = 0;
             }
@@ -1795,15 +1797,25 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "Native");
             }
 
-            // Line 2: Upscaler + Resolution scale + Hybrid MV + Reflex/XeLL
-            char line2[128];
+            // Line 2: Group related technologies together
+            // 1) Upscaler is immediately followed by its Frame Generation counterpart:
+            char line2[160];
             snprintf(line2, sizeof line2, "%s", g_perf_upscaler);
 
+            if (fgm > 1) {
+                const char *fgm_mode = cfg_value("TOTK_FG_MODE");
+                const char *fgt = (!strcmp(fgm_mode, "dlss_fg") && vk_gpu_is_nvidia()) ? "DLSS FG"
+                                : (!strcmp(fgm_mode, "xefg") && vk_gpu_is_intel()) ? "XeFG"
+                                : (!strcmp(fgm_mode, "fsr4_fg") && vk_gpu_is_rx9000()) ? "FSR4 FG" : "FSR3 FG";
+                char fg_buf[32];
+                snprintf(fg_buf, sizeof fg_buf, " + %s %dx", fgt, fgm);
+                strncat(line2, fg_buf, sizeof(line2) - strlen(line2) - 1);
+            }
+
+            // 2) NR is grouped next: shows NR Active with its Preset right beside it:
             if (is_nr) {
-                const char *nr_preset = cfg_value("TOTK_DLSS_NR_PRESET");
-                const char *pr_display = (!nr_preset || !strcasecmp(nr_preset, "preset_b") || !strcmp(nr_preset, "B")) ? "Preset B" : nr_preset;
                 char nr_buf[48];
-                snprintf(nr_buf, sizeof nr_buf, " | NR %s", pr_display);
+                snprintf(nr_buf, sizeof nr_buf, " | NR Active (%s)", pr_display);
                 strncat(line2, nr_buf, sizeof(line2) - strlen(line2) - 1);
             }
             if (scene[0] > 0 && out[0] > 0 && scene[0] < out[0]) {
