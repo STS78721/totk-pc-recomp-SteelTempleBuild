@@ -167,7 +167,7 @@ static const CfgMeta metas[] = {
     {"VOLUME", "100", "0..100", LIVE},
     {"MOTION", "1", "0|1", LIVE}, {"RUMBLE_STRENGTH", "130", "0..300", LIVE}, {"RUMBLE_CURVE", "0.6", "0.2..1.5", LIVE},
     {"RUMBLE_TRIGGERS", "0", "0|1", LIVE},
-    {"DUALSENSE", "1", "0|1", LIVE},
+    {"DUALSENSE", "0", "0|1", LIVE},
     {"DUALSENSE_TRIGGERS", "1", "0|1", LIVE},
     {"DUALSENSE_TRIGGER_STRENGTH", "100", "0..100", LIVE},
     {"DUALSENSE_AUDIO", "1", "0|1", LIVE},

@@ -71,6 +71,17 @@ static float g_spk_lp_y1_l = 0.0f, g_spk_lp_y1_r = 0.0f;
 static float g_lp_y1_l = 0.0f, g_lp_y1_r = 0.0f;
 static int g_ds_channels = 4;
 
+static bool dualsense_is_ps5_gamepad(SDL_Gamepad *pad) {
+    if (!pad) return false;
+    SDL_GamepadType type = SDL_GetGamepadType(pad);
+    if (type == SDL_GAMEPAD_TYPE_PS5) return true;
+    type = SDL_GetRealGamepadType(pad);
+    if (type == SDL_GAMEPAD_TYPE_PS5) return true;
+    const char *name = SDL_GetGamepadName(pad);
+    if (name && (strstr(name, "DualSense") || strstr(name, "dualsense") || strstr(name, "PS5"))) return true;
+    return false;
+}
+
 void dualsense_init(void) {
     plat_mutex_lock(&g_ds_lock);
     static bool atexit_registered = false;
@@ -83,7 +94,14 @@ void dualsense_init(void) {
         return;
     }
 
-    if (cfg_value("TOTK_DUALSENSE") && !cfg_bool("TOTK_DUALSENSE")) {
+    // Must be explicitly enabled in configuration
+    if (!cfg_bool("TOTK_DUALSENSE")) {
+        plat_mutex_unlock(&g_ds_lock);
+        return;
+    }
+
+    // Must have a verified physical PS5 DualSense connected
+    if (!g_current_pad || !dualsense_is_ps5_gamepad(g_current_pad)) {
         plat_mutex_unlock(&g_ds_lock);
         return;
     }
@@ -97,7 +115,7 @@ void dualsense_init(void) {
     SDL_AudioDeviceID *devs = SDL_GetAudioPlaybackDevices(&count);
     for (int i = 0; i < count; i++) {
         const char *name = SDL_GetAudioDeviceName(devs[i]);
-        if (name && (strstr(name, "DualSense") || strstr(name, "Wireless Controller"))) {
+        if (name && (strstr(name, "DualSense") || strstr(name, "dualsense") || strstr(name, "Wireless Controller"))) {
             g_ds_device = devs[i];
             rt_log("dualsense: matched audio device '%s' (ID %u)", name, g_ds_device);
             break;
@@ -128,16 +146,9 @@ void dualsense_init(void) {
 
 // Routes the game's actual 48kHz audio into DualSense speaker (high-pass) & voice coils (low-pass)
 void dualsense_feed_audio(const float *lr, int frames, int rate) {
-    if (!g_ds_stream) {
-        static uint64_t last_check = 0;
-        uint64_t now = plat_now_ns();
-        if (now - last_check > 1000000000ull) {
-            last_check = now;
-            dualsense_init();
-        }
-        if (!g_ds_stream) return;
+    if (!cfg_bool("TOTK_DUALSENSE") || !g_ds_stream) {
+        return; // Fast path: zero locks, zero device queries, zero stalls on the render/audio thread
     }
-    if (cfg_value("TOTK_DUALSENSE") && !cfg_bool("TOTK_DUALSENSE")) return;
 
     bool enable_speaker = !cfg_value("TOTK_DUALSENSE_AUDIO") || cfg_bool("TOTK_DUALSENSE_AUDIO");
     bool enable_haptics = !cfg_value("TOTK_DUALSENSE_HAPTICS") || cfg_bool("TOTK_DUALSENSE_HAPTICS");
@@ -295,8 +306,15 @@ static void send_trigger_effects(SDL_Gamepad *pad, uint8_t r2_mode, uint8_t r2_p
 }
 
 void dualsense_poll(void *sdl_gamepad, const uint8_t *pd, int16_t l2_raw, int16_t r2_raw) {
+    if (!cfg_bool("TOTK_DUALSENSE")) return;
+
     SDL_Gamepad *pad = (SDL_Gamepad *)sdl_gamepad;
     if (!pad) return;
+
+    // Strict hardware gating: only PS5 DualSense controllers run DualSense routines
+    if (!dualsense_is_ps5_gamepad(pad)) {
+        return;
+    }
     g_current_pad = pad;
 
     static bool led_initialized = false;
@@ -306,8 +324,13 @@ void dualsense_poll(void *sdl_gamepad, const uint8_t *pd, int16_t l2_raw, int16_
         SDL_SetGamepadLED(pad, 32, 248, 184);
     }
 
-    if (!g_ds_stream && plat_now_ns() % 2000000000ull < 50000000ull) {
-        dualsense_init();
+    if (!g_ds_stream) {
+        static uint64_t last_init_check = 0;
+        uint64_t now_poll = plat_now_ns();
+        if (now_poll - last_init_check > 5000000000ull) {
+            last_init_check = now_poll;
+            dualsense_init();
+        }
     }
 
     uint64_t now = kern_now_ns();

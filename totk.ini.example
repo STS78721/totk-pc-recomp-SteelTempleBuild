@@ -266,8 +266,8 @@
 # rumble_curve = 0.6
 # rumble_triggers = 0
 # PlayStation 5 DualSense Controller: adaptive triggers (bow tension, shield resistance), voice-coil haptics,
-# and interactive controller speaker audio (arrow shot, shield block, weapon hit, chest open, fast travel).
-# dualsense = 1
+# and interactive controller speaker audio. Experimental: keep 0 unless using a physical Sony PS5 DualSense controller.
+# dualsense = 0
 # dualsense_triggers = 1
 # dualsense_trigger_strength = 100
 # dualsense_audio = 1
