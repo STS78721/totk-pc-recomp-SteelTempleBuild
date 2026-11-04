@@ -345,7 +345,7 @@ static void win32_process_optimizations_init(void) {
             }
         }
     }
-    fprintf(stderr, "[totk-alpha-opt] MMCSS 'Games' priority HIGH, EcoQoS throttling disabled, ABOVE_NORMAL priority active\n");
+    fprintf(stderr, "[totk] MMCSS 'Games' priority HIGH, EcoQoS throttling disabled, ABOVE_NORMAL priority active\n");
 }
 
 __attribute__((constructor)) static void qpc_ns_init(void) {
