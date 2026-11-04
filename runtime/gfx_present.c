@@ -255,42 +255,9 @@ static void window_settings_live(void) {
 static const char *g_present_got = "";   // the TOTK_VK_PRESENT value of the mode the swapchain got; "" before one
 
 // ---- NVIDIA Reflex Low Latency (VK_NV_low_latency2)
-typedef struct {
-    VkStructureType sType;
-    const void *pNext;
-    VkBool32 lowLatencyMode;
-    VkBool32 lowLatencyBoost;
-    uint32_t minimumIntervalUs;
-} ReflexModeInfoNV;
-
-typedef struct {
-    VkStructureType sType;
-    const void *pNext;
-    VkSemaphore sleepSemaphore;
-    uint64_t value;
-} ReflexSleepInfoNV;
-
-typedef struct {
-    VkStructureType sType;
-    const void *pNext;
-    uint64_t presentID;
-    int marker;
-} ReflexMarkerInfoNV;
-
-typedef struct {
-    VkStructureType sType;
-    const void *pNext;
-    uint32_t presentIDCount;
-    const uint64_t *pPresentIDs;
-} PresentIdKHR;
-
-typedef VkResult(VKAPI_PTR *ReflexSetModeFn)(VkDevice, VkSwapchainKHR, const ReflexModeInfoNV *);
-typedef VkResult(VKAPI_PTR *ReflexSleepFn)(VkDevice, VkSwapchainKHR, const ReflexSleepInfoNV *);
-typedef void(VKAPI_PTR *ReflexMarkerFn)(VkDevice, VkSwapchainKHR, const ReflexMarkerInfoNV *);
-
-static ReflexSetModeFn g_reflex_set_mode;
-static ReflexSleepFn g_reflex_sleep;
-static ReflexMarkerFn g_reflex_marker;
+static PFN_vkSetLatencySleepModeNV g_reflex_set_mode;
+static PFN_vkLatencySleepNV g_reflex_sleep;
+static PFN_vkSetLatencyMarkerNV g_reflex_marker;
 static VkSemaphore g_reflex_sem;
 static uint64_t g_reflex_val;
 static uint64_t g_reflex_present_id = 1;
@@ -301,9 +268,9 @@ static void reflex_apply_locked(void) {
     VkCtx *c = vk_ctx();
     if (!c || !c->has_nv_reflex || !g_sc) return;
     if (!g_reflex_set_mode) {
-        g_reflex_set_mode = (ReflexSetModeFn)vkGetDeviceProcAddr(c->device, "vkSetLatencySleepModeNV");
-        g_reflex_sleep = (ReflexSleepFn)vkGetDeviceProcAddr(c->device, "vkLatencySleepNV");
-        g_reflex_marker = (ReflexMarkerFn)vkGetDeviceProcAddr(c->device, "vkSetLatencyMarkerNV");
+        g_reflex_set_mode = (PFN_vkSetLatencySleepModeNV)vkGetDeviceProcAddr(c->device, "vkSetLatencySleepModeNV");
+        g_reflex_sleep = (PFN_vkLatencySleepNV)vkGetDeviceProcAddr(c->device, "vkLatencySleepNV");
+        g_reflex_marker = (PFN_vkSetLatencyMarkerNV)vkGetDeviceProcAddr(c->device, "vkSetLatencyMarkerNV");
     }
     if (!g_reflex_set_mode) return;
     if (!g_reflex_sem) {
@@ -320,19 +287,33 @@ static void reflex_apply_locked(void) {
     if (mode == g_reflex_mode && min_us == g_reflex_min_us) return;
     g_reflex_mode = mode;
     g_reflex_min_us = min_us;
-    ReflexModeInfoNV mi = {.sType = (VkStructureType)1000505000, .lowLatencyMode = mode > 0 ? VK_TRUE : VK_FALSE,
-                           .lowLatencyBoost = mode == 2 ? VK_TRUE : VK_FALSE, .minimumIntervalUs = min_us};
+    VkLatencySleepModeInfoNV mi = {
+        .sType = VK_STRUCTURE_TYPE_LATENCY_SLEEP_MODE_INFO_NV,
+        .lowLatencyMode = mode > 0 ? VK_TRUE : VK_FALSE,
+        .lowLatencyBoost = mode == 2 ? VK_TRUE : VK_FALSE,
+        .minimumIntervalUs = min_us
+    };
     VkResult r = g_reflex_set_mode(c->device, g_sc, &mi);
-    vk_upscaler_log("REFLEX: NVIDIA Reflex Low Latency -> %s (minInterval=%u us, VK_NV_low_latency2=%s)",
-                    mode == 2 ? "ON + BOOST" : mode == 1 ? "ON" : "OFF", min_us, r == VK_SUCCESS ? "OK" : "ERR");
+    rt_log("REFLEX: NVIDIA Reflex Low Latency -> %s (minInterval=%u us, VK_NV_low_latency2=%s)",
+           mode == 2 ? "ON + BOOST" : mode == 1 ? "ON" : "OFF", min_us, r == VK_SUCCESS ? "OK" : "ERR");
 }
 
 void vk_reflex_marker(int marker) {
     VkCtx *c = vk_ctx();
-    if (!c || !c->has_nv_reflex || !g_reflex_marker || g_reflex_mode <= 0 || !g_sc) return;
+    if (!c || !c->has_nv_reflex || !g_reflex_marker || g_reflex_mode <= 0) return;
+    plat_rmutex_lock(&g_pl);
+    if (!g_sc) {
+        plat_rmutex_unlock(&g_pl);
+        return;
+    }
     uint64_t pid = __atomic_load_n(&g_reflex_present_id, __ATOMIC_RELAXED);
-    ReflexMarkerInfoNV mi = {.sType = (VkStructureType)1000505002, .presentID = pid, .marker = marker};
+    VkSetLatencyMarkerInfoNV mi = {
+        .sType = VK_STRUCTURE_TYPE_SET_LATENCY_MARKER_INFO_NV,
+        .presentID = pid,
+        .marker = (VkLatencyMarkerNV)marker
+    };
     g_reflex_marker(c->device, g_sc, &mi);
+    plat_rmutex_unlock(&g_pl);
 }
 
 int vk_has_reflex(void) {
@@ -346,12 +327,27 @@ uint64_t vk_reflex_current_present_id(void) {
 
 void vk_reflex_sleep(void) {
     VkCtx *c = vk_ctx();
-    if (!c || !c->has_nv_reflex || !g_reflex_sleep || !g_reflex_sem || g_reflex_mode <= 0 || !g_sc) return;
+    if (!c || !c->has_nv_reflex || !g_reflex_sleep || !g_reflex_sem || g_reflex_mode <= 0) return;
+    plat_rmutex_lock(&g_pl);
+    if (!g_sc) {
+        plat_rmutex_unlock(&g_pl);
+        return;
+    }
     uint64_t val = __atomic_add_fetch(&g_reflex_val, 1, __ATOMIC_RELAXED);
-    ReflexSleepInfoNV si = {.sType = (VkStructureType)1000505001, .sleepSemaphore = g_reflex_sem, .value = val};
-    if (g_reflex_sleep(c->device, g_sc, &si) == VK_SUCCESS) {
-        VkSemaphoreWaitInfo wi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, .semaphoreCount = 1,
-                                  .pSemaphores = &g_reflex_sem, .pValues = &val};
+    VkLatencySleepInfoNV si = {
+        .sType = VK_STRUCTURE_TYPE_LATENCY_SLEEP_INFO_NV,
+        .signalSemaphore = g_reflex_sem,
+        .value = val
+    };
+    VkResult r = g_reflex_sleep(c->device, g_sc, &si);
+    plat_rmutex_unlock(&g_pl);
+    if (r == VK_SUCCESS) {
+        VkSemaphoreWaitInfo wi = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+            .semaphoreCount = 1,
+            .pSemaphores = &g_reflex_sem,
+            .pValues = &val
+        };
         vkWaitSemaphores(c->device, &wi, 50000000ull);
     }
 }
@@ -534,14 +530,8 @@ static void flip_locked(void) {
     if (!g_sc) return;
     vk_reflex_marker(4);   //VK_LATENCY_MARKER_PRESENT_START_NV
     uint64_t cur_pid = __atomic_load_n(&g_reflex_present_id, __ATOMIC_RELAXED);
-    typedef struct {
-        VkStructureType sType;
-        const void *pNext;
-        uint32_t swapchainCount;
-        const uint64_t *pPresentIds;
-    } PresentIdKHR;
-    PresentIdKHR pid_khr = {
-        .sType = (VkStructureType)1000085001,
+    VkPresentIdKHR pid_khr = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR,
         .pNext = NULL,
         .swapchainCount = 1,
         .pPresentIds = &cur_pid
@@ -601,15 +591,10 @@ static int create_swapchain(void) {
     vk_queue_lock();
     vkDeviceWaitIdle(c->device);
     VkSwapchainKHR old = g_sc;
-    typedef struct {
-        VkStructureType sType;
-        const void *pNext;
-        VkBool32 latencyMode;
-    } SwapchainLatencyCreateInfoNV;
-    SwapchainLatencyCreateInfoNV slc = {
-        .sType = (VkStructureType)1000505004,
+    VkSwapchainLatencyCreateInfoNV slc = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_LATENCY_CREATE_INFO_NV,
         .pNext = NULL,
-        .latencyMode = VK_TRUE
+        .latencyModeEnable = VK_TRUE
     };
     VkSwapchainCreateInfoKHR ci = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
