@@ -10,6 +10,7 @@
 // addressing inside a level and the copy.
 #include "tex.h"
 #include <string.h>
+#include <immintrin.h>
 
 static uint32_t gob_off(uint32_t x, uint32_t y) {
     return (x % 64 / 32) * 256 + (y % 8 / 2) * 64 + (x % 32 / 16) * 32 + (y % 2) * 16 + x % 16;
@@ -56,12 +57,21 @@ void tex_bl_copy(uint8_t *bl, uint8_t *lin, size_t pitch, uint32_t row_bytes, ui
         for (uint32_t y = 0; y < rows; y++) {
             uint8_t *row = lin + ((size_t)z * rows + y) * pitch, *g = bl + nvn_bl_offset(0, y, z, row_bytes, rows, th, td);
             uint32_t x = 0;
-            if (to_linear)
-                for (; x + 64 <= row_bytes; x += 64, g += block)
-                    for (int s = 0; s < 4; s++) memcpy(row + x + 16 * s, g + seg[s], 16);
-            else
-                for (; x + 64 <= row_bytes; x += 64, g += block)
-                    for (int s = 0; s < 4; s++) memcpy(g + seg[s], row + x + 16 * s, 16);
+            if (to_linear) {
+                for (; x + 64 <= row_bytes; x += 64, g += block) {
+                    _mm_storeu_si128((__m128i *)(row + x + 0),  _mm_loadu_si128((const __m128i *)(g + 0)));
+                    _mm_storeu_si128((__m128i *)(row + x + 16), _mm_loadu_si128((const __m128i *)(g + 32)));
+                    _mm_storeu_si128((__m128i *)(row + x + 32), _mm_loadu_si128((const __m128i *)(g + 256)));
+                    _mm_storeu_si128((__m128i *)(row + x + 48), _mm_loadu_si128((const __m128i *)(g + 288)));
+                }
+            } else {
+                for (; x + 64 <= row_bytes; x += 64, g += block) {
+                    _mm_storeu_si128((__m128i *)(g + 0),   _mm_loadu_si128((const __m128i *)(row + x + 0)));
+                    _mm_storeu_si128((__m128i *)(g + 32),  _mm_loadu_si128((const __m128i *)(row + x + 16)));
+                    _mm_storeu_si128((__m128i *)(g + 256), _mm_loadu_si128((const __m128i *)(row + x + 32)));
+                    _mm_storeu_si128((__m128i *)(g + 288), _mm_loadu_si128((const __m128i *)(row + x + 48)));
+                }
+            }
             for (int s = 0; x < row_bytes; s++, x += 16) {   // a partial GOB at the row's end
                 uint32_t n = row_bytes - x < 16 ? row_bytes - x : 16;
                 if (to_linear) memcpy(row + x, g + seg[s], n); else memcpy(g + seg[s], row + x, n);

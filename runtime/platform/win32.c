@@ -50,6 +50,9 @@ PlatThread *plat_thread_new_ex(PlatThreadFn fn, void *arg, const char *name, siz
     if (name) {
         wchar_t w[64];
         if (MultiByteToWideChar(CP_UTF8, 0, name, -1, w, 64)) SetThreadDescription(t->h, w);
+        if (strstr(name, "render") || strstr(name, "kernel") || strstr(name, "worker") || strstr(name, "audio")) {
+            SetThreadPriority(t->h, THREAD_PRIORITY_ABOVE_NORMAL);
+        }
     }
     ResumeThread(t->h);
     return t;
@@ -321,7 +324,37 @@ void plat_timer_1ms(void) { timeBeginPeriod(1); }
 
 static PlatScale qpc_ns;   // set before main, so no thread reads it half written
 
-__attribute__((constructor)) static void qpc_ns_init(void) { qpc_ns = plat_scale(1000000000u, qpc_freq()); }
+static void win32_process_optimizations_init(void) {
+    timeBeginPeriod(1);
+    typedef struct {
+        ULONG Version;
+        ULONG ControlMask;
+        ULONG StateMask;
+    } PowerThrottlingState;
+    PowerThrottlingState pts = {1, 1, 0};
+    SetProcessInformation(GetCurrentProcess(), (PROCESS_INFORMATION_CLASS)4, &pts, sizeof(pts));
+    SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
+    HMODULE avrt = LoadLibraryW(L"avrt.dll");
+    if (avrt) {
+        typedef HANDLE (WINAPI *AvSetCharsFn)(LPCWSTR, LPDWORD);
+        typedef BOOL (WINAPI *AvSetPrioFn)(HANDLE, int);
+        AvSetCharsFn set_chars = (AvSetCharsFn)GetProcAddress(avrt, "AvSetMmThreadCharacteristicsW");
+        AvSetPrioFn set_prio = (AvSetPrioFn)GetProcAddress(avrt, "AvSetMmThreadPriority");
+        if (set_chars) {
+            DWORD taskIndex = 0;
+            HANDLE hTask = set_chars(L"Games", &taskIndex);
+            if (hTask && set_prio) {
+                set_prio(hTask, 2 /* AVRT_PRIORITY_HIGH */);
+            }
+        }
+    }
+    fprintf(stderr, "[totk-alpha-opt] MMCSS 'Games' priority HIGH, EcoQoS throttling disabled, ABOVE_NORMAL priority active\n");
+}
+
+__attribute__((constructor)) static void qpc_ns_init(void) {
+    qpc_ns = plat_scale(1000000000u, qpc_freq());
+    win32_process_optimizations_init();
+}
 
 uint64_t plat_now_ns(void) {
     LARGE_INTEGER t;

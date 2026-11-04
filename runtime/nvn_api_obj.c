@@ -662,7 +662,7 @@ static void sleep_until(uint64_t deadline) {
         uint64_t now = kern_now_ns();
         if (now >= deadline) return;
         uint64_t d = deadline - now;
-        if (d >= 2000000) plat_sleep_ms((uint32_t)(d / 1000000 - 1));
+        if (d > PLAT_WAIT_LATE_NS) plat_wait_ns(d - PLAT_WAIT_LATE_NS);
         else plat_yield();
     }
 }
