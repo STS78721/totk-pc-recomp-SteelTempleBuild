@@ -206,6 +206,21 @@ class ModernTotkInstaller(ctk.CTk):
                                       command=self.on_tab_changed)
         self.tabview.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
 
+        # Ensure both manual clicks on segmented tabs and programmatic set() update bottom action buttons
+        _orig_sb_cb = self.tabview._segmented_button_callback
+        def _hooked_sb_cb(selected_name):
+            _orig_sb_cb(selected_name)
+            self.on_tab_changed()
+            self.after(20, self.on_tab_changed)
+        self.tabview._segmented_button_callback = _hooked_sb_cb
+
+        _orig_set = self.tabview.set
+        def _hooked_set(name):
+            _orig_set(name)
+            self.on_tab_changed()
+            self.after(20, self.on_tab_changed)
+        self.tabview.set = _hooked_set
+
         self.tab_files = self.tabview.add("1. Game Files & Location")
         self.tab_features = self.tabview.add("2. Features & Controllers")
         self.tab_guide = self.tabview.add("3. Controller Hotkey Guide")
@@ -237,16 +252,20 @@ class ModernTotkInstaller(ctk.CTk):
         curr = self.tabview.get()
         if "1." in curr:
             self.btn_back.configure(state="disabled")
-            self.btn_next.configure(text="Next: Features & Controllers →", state="normal", fg_color=ACCENT_HOVER)
+            self.btn_next.configure(text="Next: Features & Controllers →", state="normal",
+                                    fg_color=ACCENT_HOVER, hover_color=ACCENT_GREEN, command=self.advance_tab)
         elif "2." in curr:
             self.btn_back.configure(state="normal")
-            self.btn_next.configure(text="Next: Controller Hotkey Guide →", state="normal", fg_color=ACCENT_HOVER)
+            self.btn_next.configure(text="Next: Controller Hotkey Guide →", state="normal",
+                                    fg_color=ACCENT_HOVER, hover_color=ACCENT_GREEN, command=self.advance_tab)
         elif "3." in curr:
             self.btn_back.configure(state="normal")
-            self.btn_next.configure(text="Next: Installation & Launch →", state="normal", fg_color=ACCENT_HOVER)
+            self.btn_next.configure(text="Next: Installation & Launch →", state="normal",
+                                    fg_color=ACCENT_HOVER, hover_color=ACCENT_GREEN, command=self.advance_tab)
         elif "4." in curr:
             self.btn_back.configure(state="normal")
-            self.btn_next.configure(text="Ready to Install", state="disabled", fg_color=CARD_BORDER)
+            self.btn_next.configure(text="Start Installation ⚡", state="normal",
+                                    fg_color=ACCENT_GREEN, hover_color=ACCENT_HOVER, command=self.start_installation)
 
     def advance_tab(self):
         curr = self.tabview.get()
@@ -256,7 +275,8 @@ class ModernTotkInstaller(ctk.CTk):
             self.tabview.set("3. Controller Hotkey Guide")
         elif "3." in curr:
             self.tabview.set("4. Installation & Launch")
-        self.on_tab_changed()
+        elif "4." in curr:
+            self.start_installation()
 
     def go_back_tab(self):
         curr = self.tabview.get()
@@ -266,7 +286,6 @@ class ModernTotkInstaller(ctk.CTk):
             self.tabview.set("2. Features & Controllers")
         elif "4." in curr:
             self.tabview.set("3. Controller Hotkey Guide")
-        self.on_tab_changed()
 
     def build_tab_files(self):
         frame = self.tab_files
