@@ -196,7 +196,7 @@ class ModernTotkInstaller(ctk.CTk):
                                  font=ctk.CTkFont(size=20, weight="bold"), text_color=ACCENT_GREEN)
         title_lbl.pack(pady=(12, 2))
 
-        sub_lbl = ctk.CTkLabel(header, text="SteelTempSaint's ToTK Recomp (Beta 5) | 60 FPS • DLSS 4.5 • DualSense Immersion",
+        sub_lbl = ctk.CTkLabel(header, text="SteelTempSaint's ToTK Recomp (Beta 5b) | 60 FPS • DLSS 4.5 • Reflex • DualSense Immersion",
                                font=ctk.CTkFont(size=12, weight="bold"), text_color=TEXT_DIM)
         sub_lbl.pack(pady=(0, 12))
 
