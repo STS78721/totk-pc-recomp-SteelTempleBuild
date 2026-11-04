@@ -50,9 +50,6 @@ PlatThread *plat_thread_new_ex(PlatThreadFn fn, void *arg, const char *name, siz
     if (name) {
         wchar_t w[64];
         if (MultiByteToWideChar(CP_UTF8, 0, name, -1, w, 64)) SetThreadDescription(t->h, w);
-        if (strstr(name, "render") || strstr(name, "kernel") || strstr(name, "worker") || strstr(name, "audio")) {
-            SetThreadPriority(t->h, THREAD_PRIORITY_ABOVE_NORMAL);
-        }
     }
     ResumeThread(t->h);
     return t;
