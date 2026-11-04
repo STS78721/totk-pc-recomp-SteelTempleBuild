@@ -85,8 +85,29 @@ Every idea is welcome, whether you're a casual player enjoying Hyrule on your co
 
 ## 📥 Quick Start & Downloads
 
-Check out the latest prebuilt packages on our **[Releases Page](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest)**:
-- **Modern Setup Installer (`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5.exe` / `TotK-Setup-Modern-Beta-5.zip`):** All-in-one setup wizard with dark Zonai UI, multi-vendor AI SDK integration, auto-save migration, and native Controller UI prompts.
-- **Quick Drop-In Update (`TotK-Recomp-SteelTemple-Beta-5.zip`):** Extract and replace `totk.exe` and DLLs directly into your existing v1.4.3 game directory.
+Grab the latest prebuilt packages from our **[Latest Release (Beta 5c)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-5c)**:
+
+### ⚡ 1. Upgrading / Moving from Another Recomp (Zero Recompiling Needed)
+If you already have a working game folder or are switching from upstream recomp:
+1. Download **[`totk-pc-recomp-Beta-5c-update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5c/totk-pc-recomp-Beta-5c-update.zip)** (85 MB).
+2. Extract and replace **`totk.exe`** and **`totk.ini`** directly into your existing game directory.
+3. Launch `totk.exe`! Your existing save games, settings, and RomFS will work seamlessly.
+
+### 🎮 2. New Players (Fresh Standalone Setup)
+1. Download **[`TotK-Recomp-SteelTemple-Beta-5c.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5c/TotK-Recomp-SteelTemple-Beta-5c.zip)** (473 MB).
+2. Extract the archive into your chosen game folder (e.g. `C:\Games\Tears of the Kingdom PC\GAME`).
+   - *This includes the precompiled `totk.exe`, `SDL3.dll`, all multi-vendor AI upscaler DLLs, controller configs, and aspect ratio patches.*
+3. Copy your dumped **`romfs`** folder (from your legally owned 1.4.3 game dump) into this folder.
+4. Launch **`totk.exe`** to play!
+
+### 🛠️ 3. Modern Setup & Configuration Utility (Optional)
+- Download **[`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5c.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5c/The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5c.exe)** (or portable zip **`TotK-Setup-Modern-Beta-5c-windows.zip`**).
+- Use this wizard to:
+  - Configure multi-vendor AI upscalers (NVIDIA DLSS 4.5, DLSS-NR, Intel XeSS).
+  - Install custom Controller UI prompt themes (PlayStation 5 DualSense, DualShock 4, Xbox).
+  - Automatically detect and migrate your saves from Yuzu, Ryujinx, or previous recomp builds.
+  - Create a 1-click Desktop shortcut with high-resolution game icons.
+
+---
 
 *Thank you to all contributors, testers, and players building the ultimate Tears of the Kingdom experience!* 🗡️🛡️
