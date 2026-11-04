@@ -434,7 +434,18 @@ uint64_t vk_sync_submit(const uint64_t *handles, int n) {
                                         {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = s->cb}};
     VkSemaphoreSubmitInfo sig = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = c->timeline,
                                  .value = fence, .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
+    typedef struct {
+        VkStructureType sType;
+        const void *pNext;
+        uint64_t presentID;
+    } LatencySubmissionPresentIdNV;
+    LatencySubmissionPresentIdNV lsid = {
+        .sType = (VkStructureType)1000505005,
+        .pNext = NULL,
+        .presentID = vk_reflex_current_present_id()
+    };
     VkSubmitInfo2 si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                        .pNext = (c->has_nv_reflex) ? &lsid : NULL,
                         .commandBufferInfoCount = (pro ? 1u : 0u) + (recorded ? 1u : 0u),
                         .pCommandBufferInfos = pro ? cbi : cbi + 1, .signalSemaphoreInfoCount = 1,
                         .pSignalSemaphoreInfos = &sig};

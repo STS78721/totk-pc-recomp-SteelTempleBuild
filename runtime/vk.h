@@ -156,6 +156,8 @@ int vk_fsr_scene(VkCommandBuffer cb, VkImageView src_view, VkImage src_img, uint
 void vk_upscaler_log(const char *fmt, ...);
 void vk_reflex_marker(int marker);
 void vk_reflex_sleep(void);
+uint64_t vk_reflex_current_present_id(void);
+int vk_has_reflex(void);
 void vk_antilag_sleep(void);
 int vk_gpu_is_nvidia(void);
 int vk_gpu_is_rtx40_plus(void);

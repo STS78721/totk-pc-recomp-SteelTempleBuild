@@ -331,8 +331,17 @@ void vk_reflex_marker(int marker) {
     VkCtx *c = vk_ctx();
     if (!c || !c->has_nv_reflex || !g_reflex_marker || g_reflex_mode <= 0 || !g_sc) return;
     uint64_t pid = __atomic_load_n(&g_reflex_present_id, __ATOMIC_RELAXED);
-    ReflexMarkerInfoNV mi = {.sType = (VkStructureType)1000505003, .presentID = pid, .marker = marker};
+    ReflexMarkerInfoNV mi = {.sType = (VkStructureType)1000505002, .presentID = pid, .marker = marker};
     g_reflex_marker(c->device, g_sc, &mi);
+}
+
+int vk_has_reflex(void) {
+    VkCtx *c = vk_ctx();
+    return c ? c->has_nv_reflex : 0;
+}
+
+uint64_t vk_reflex_current_present_id(void) {
+    return __atomic_load_n(&g_reflex_present_id, __ATOMIC_RELAXED);
 }
 
 void vk_reflex_sleep(void) {
@@ -524,7 +533,23 @@ static void flip_locked(void) {
     g_flip_on = 0;
     if (!g_sc) return;
     vk_reflex_marker(4);   //VK_LATENCY_MARKER_PRESENT_START_NV
-    VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1,
+    uint64_t cur_pid = __atomic_load_n(&g_reflex_present_id, __ATOMIC_RELAXED);
+    typedef struct {
+        VkStructureType sType;
+        const void *pNext;
+        uint32_t swapchainCount;
+        const uint64_t *pPresentIds;
+    } PresentIdKHR;
+    PresentIdKHR pid_khr = {
+        .sType = (VkStructureType)1000085001,
+        .pNext = NULL,
+        .swapchainCount = 1,
+        .pPresentIds = &cur_pid
+    };
+    VkCtx *c = vk_ctx();
+    VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+                           .pNext = (c && c->has_nv_reflex) ? &pid_khr : NULL,
+                           .waitSemaphoreCount = 1,
                            .pWaitSemaphores = &g_render_done[g_flip_idx], .swapchainCount = 1, .pSwapchains = &g_sc,
                            .pImageIndices = &g_flip_idx};
     vk_queue_lock();
@@ -576,8 +601,20 @@ static int create_swapchain(void) {
     vk_queue_lock();
     vkDeviceWaitIdle(c->device);
     VkSwapchainKHR old = g_sc;
+    typedef struct {
+        VkStructureType sType;
+        const void *pNext;
+        VkBool32 latencyMode;
+    } SwapchainLatencyCreateInfoNV;
+    SwapchainLatencyCreateInfoNV slc = {
+        .sType = (VkStructureType)1000505004,
+        .pNext = NULL,
+        .latencyMode = VK_TRUE
+    };
     VkSwapchainCreateInfoKHR ci = {
-        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, .surface = g_surface, .minImageCount = count,
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .pNext = c->has_nv_reflex ? &slc : NULL,
+        .surface = g_surface, .minImageCount = count,
         .imageFormat = sf.format, .imageColorSpace = sf.colorSpace, .imageExtent = ext, .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,   // every surface supports it (the menu overlay draws into it)

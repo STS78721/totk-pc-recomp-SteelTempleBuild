@@ -232,6 +232,7 @@ typedef struct {
     VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT gpl;
     VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT fbl;
     VkPhysicalDeviceDynamicRenderingLocalReadFeaturesKHR lr;
+    VkPhysicalDevicePresentIdFeaturesKHR pid;
 } FeatureChain;
 
 static int create_device(void) {
@@ -293,9 +294,11 @@ static int create_device(void) {
         g_vk.has_nv_checkpoints = 1;
         ext[n_ext++] = VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME;
     }
-    if (has_ext(ep, ne, "VK_NV_low_latency2")) {
+    if (has_ext(ep, ne, VK_KHR_PRESENT_ID_EXTENSION_NAME) && has_ext(ep, ne, "VK_NV_low_latency2")) {
         g_vk.has_nv_reflex = 1;
+        ext[n_ext++] = VK_KHR_PRESENT_ID_EXTENSION_NAME;
         ext[n_ext++] = "VK_NV_low_latency2";
+        CHAIN(pid, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR);
     }
     if (has_ext(ep, ne, "VK_AMD_anti_lag")) {
         g_vk.has_amd_antilag = 1;
