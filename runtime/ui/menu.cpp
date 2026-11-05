@@ -570,12 +570,7 @@ static bool rows_upscaler(void) {
                               menu_text(UI_MENU_UPSCALER_BILINEAR)};
     if (opt_choice_list("TOTK_UPSCALER", UI_MENU_UPSCALER, up_vals, up_names, 5, UI_MENU_UPSCALER_DESC)) {
         const char *u = cfg_value("TOTK_UPSCALER");
-        if (strcmp(u, "dlss") != 0) {
-            cfg_set("TOTK_DLAA", "0");
-        } else {
-            const char *pr = cfg_value("TOTK_UPSCALER_PRESET");
-            cfg_set("TOTK_DLAA", (pr && !strcmp(pr, "native")) ? "1" : "0");
-        }
+        cfg_set("TOTK_DLAA", !strcmp(u, "dlss") ? "1" : "0");
         cfg_save();
     }
     const char *up = cfg_value("TOTK_UPSCALER");
@@ -606,7 +601,7 @@ static bool rows_upscaler(void) {
             for (const auto &e : p)
                 if (!strcmp(cfg_value("TOTK_UPSCALER_PRESET"), e.name)) {
                     cfg_set("TOTK_DLSS", e.dlss), cfg_set("TOTK_RENDER_SCALE", e.scale);
-                    cfg_set("TOTK_DLAA", !strcmp(e.dlss, "dlaa") ? "1" : "0");
+                    if (!strcmp(cfg_value("TOTK_UPSCALER"), "dlss")) cfg_set("TOTK_DLAA", "1");
                     cfg_set("TOTK_DLSS_PRESET", e.model);
                     cfg_save();
                 }

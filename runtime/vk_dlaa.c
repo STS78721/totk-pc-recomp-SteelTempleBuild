@@ -108,7 +108,7 @@ static int p_getp(const NgxParam *p, const char *n, void **v) { return NGX_OK(((
 // dlaa applies after a restart; switched off, nothing else of DLAA runs.
 int vk_dlaa_wanted(void) {
     static int wanted = -1;
-    if (wanted < 0) wanted = cfg_bool("TOTK_DLAA");
+    if (wanted < 0) wanted = cfg_bool("TOTK_DLAA") || !strcmp(cfg_value("TOTK_UPSCALER"), "dlss");
     return wanted;
 }
 
@@ -945,7 +945,12 @@ static void next_jitter(uint32_t w, uint32_t ow) {
 // read when a feature is created; a change recreates the features (preset_check).
 static int preset_value(void) {
     const char *v = cfg_get("TOTK_DLSS_PRESET");
-    int c = v && v[0] && !v[1] ? v[0] | 0x20 : 0;
+    if (!v || !*v) return 0;
+    if (!strncmp(v, "preset_", 7) && v[7] && !v[8]) {
+        int c = v[7] | 0x20;
+        return c >= 'a' && c <= 'm' ? c - 'a' + 1 : 0;
+    }
+    int c = v[0] && !v[1] ? v[0] | 0x20 : 0;
     return c >= 'a' && c <= 'm' ? c - 'a' + 1 : 0;
 }
 
@@ -1190,7 +1195,7 @@ void vk_dlaa_frame(void) {
     vk_dlaa_swap_img = NULL, vk_dlaa_swap_view = VK_NULL_HANDLE;
     dlss_mode();
     preset_check();
-    int on = N.available && cfg_bool("TOTK_DLAA");
+    int on = N.available && (cfg_bool("TOTK_DLAA") || !strcmp(cfg_value("TOTK_UPSCALER"), "dlss"));
     if (on != D.on) {
         rt_log("dlaa: %s", on ? "on" : "off");
         D.on = on;
