@@ -1219,27 +1219,87 @@ def restore_save_snapshot(profile_dir, snapshot_dir):
         raise
     return safety
 
-def game_process_running():
-    """Best-effort check that TotK is closed before snapshotting or restoring saves."""
+def find_running_game_processes():
+    """Find running TotK game processes, excluding the similarly named launcher."""
     if os.name == "nt":
+        target = str((GAME_DIR / "totk.exe").resolve())
+        escaped_target = target.replace("'", "''")
+        command = (
+            "$target = '" + escaped_target + "'; "
+            "$items = @(Get-CimInstance Win32_Process -Filter \"Name='totk.exe'\" | "
+            "Where-Object { $_.ExecutablePath -and "
+            "[String]::Equals([IO.Path]::GetFullPath($_.ExecutablePath), $target, "
+            "[StringComparison]::OrdinalIgnoreCase) } | "
+            "Select-Object ProcessId, ExecutablePath); "
+            "if ($items.Count -eq 1) { $items[0] | ConvertTo-Json -Compress } "
+            "else { $items | ConvertTo-Json -Compress }"
+        )
+        try:
+            result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                                    capture_output=True, text=True, timeout=8,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if result.returncode == 0:
+                output = result.stdout.strip()
+                if not output:
+                    return []
+                items = json.loads(output)
+                if isinstance(items, dict):
+                    items = [items]
+                return [{"pid": item.get("ProcessId"), "path": item.get("ExecutablePath")}
+                        for item in items if isinstance(item, dict)]
+        except Exception:
+            pass
+
+        # If CIM is unavailable, the exact image-name filter still cannot match TotKLauncher.exe.
         try:
             result = subprocess.run(["tasklist.exe", "/FI", "IMAGENAME eq totk.exe", "/FO", "CSV", "/NH"],
-                                    capture_output=True, text=True, timeout=5)
-            if result.returncode != 0:
-                return True
-            return '"totk.exe"' in result.stdout.casefold()
+                                    capture_output=True, text=True, timeout=5,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if result.returncode == 0 and '"totk.exe"' not in result.stdout.casefold():
+                return []
+            if result.returncode == 0:
+                return [{"pid": None, "path": str(GAME_DIR / "totk.exe")}]
         except Exception:
-            return True
+            pass
+        return [{"pid": None, "path": str(GAME_DIR / "totk.exe")}]
+
     checked = False
+    processes = []
     for name in ("totk", "totk.exe"):
         try:
             result = subprocess.run(["pgrep", "-x", name], capture_output=True, text=True, timeout=3)
             checked = True
             if result.returncode == 0:
-                return True
+                for pid in result.stdout.split():
+                    try:
+                        path = os.readlink(f"/proc/{int(pid)}/exe")
+                    except (OSError, ValueError):
+                        path = None
+                    processes.append({"pid": pid, "path": path})
         except Exception:
             pass
-    return not checked
+    return processes if checked else [{"pid": None, "path": None}]
+
+
+def game_process_running():
+    """Best-effort check that the installed TotK game is closed."""
+    return bool(find_running_game_processes())
+
+
+def game_process_warning(action):
+    """Build an actionable message describing the process blocking a save operation."""
+    processes = find_running_game_processes()
+    if not processes:
+        return None
+    details = []
+    for process in processes:
+        label = []
+        if process.get("pid") is not None:
+            label.append(f"PID {process['pid']}")
+        if process.get("path"):
+            label.append(str(process["path"]))
+        details.append(" — ".join(label) if label else "TotK game process (path unavailable)")
+    return f"A TotK game process is still running:\n" + "\n".join(details) + f"\nClose it before {action}."
 
 
 class SaveBackupVaultDialog(tk.Toplevel):
@@ -1295,8 +1355,9 @@ class SaveBackupVaultDialog(tk.Toplevel):
             self.snapshot_list.insert(tk.END, "No save snapshots yet")
 
     def create_snapshot(self):
-        if game_process_running():
-            messagebox.showwarning("Close the Game First", "Close totk.exe before creating a save snapshot.", parent=self)
+        warning = game_process_warning("creating a save snapshot")
+        if warning:
+            messagebox.showwarning("Close the Game First", warning, parent=self)
             return
         try:
             snapshot = create_save_snapshot(self.profile_dir, self.backups_dir)
@@ -1310,8 +1371,9 @@ class SaveBackupVaultDialog(tk.Toplevel):
         if not selection or selection[0] >= len(self.snapshots):
             messagebox.showinfo("Select a Backup", "Select a save snapshot to restore.", parent=self)
             return
-        if game_process_running():
-            messagebox.showwarning("Close the Game First", "Close totk.exe before restoring a save snapshot.", parent=self)
+        warning = game_process_warning("restoring a save snapshot")
+        if warning:
+            messagebox.showwarning("Close the Game First", warning, parent=self)
             return
         snapshot = self.snapshots[selection[0]]
         if not messagebox.askyesno("Confirm Save Restore",
@@ -1570,9 +1632,9 @@ class SonyLauncherApp(tk.Tk):
     def apply_latest_update(self):
         if self.update_in_progress or not self.latest_release:
             return
-        if game_process_running():
-            messagebox.showwarning("Close the Game First", "Close totk.exe before applying a launcher/game update.",
-                                   parent=self)
+        warning = game_process_warning("applying a launcher/game update")
+        if warning:
+            messagebox.showwarning("Close the Game First", warning, parent=self)
             return
         if not messagebox.askyesno("Install Update", f"Download and apply {self.latest_release['title']} now?",
                                    parent=self):

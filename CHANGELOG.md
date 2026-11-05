@@ -6,6 +6,7 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 
 ## [Unreleased]
 - Add a validated one-click GitHub update download/apply flow, a Vulkan shader pre-warm action, and a Save Backup Vault with pre-restore snapshots.
+- Fix the Save Backup Vault process guard to match the installed game executable path and report its PID/path when blocking an operation.
 
 ---
 
