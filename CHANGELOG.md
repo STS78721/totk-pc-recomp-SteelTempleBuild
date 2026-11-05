@@ -1,11 +1,39 @@
 # Changelog
 
-## Unreleased
+All notable changes to the **SteelTempSaint ToTK Recomp** project will be documented in this file.
 
-- Add a Steam Deck / handheld launcher preset for 1280x800, 40 FPS, FSR balanced, and reduced shadow settings, with safe Linux/SteamOS launcher platform handling.
-- Show SDL-reported gamepad battery and charging status in the compact performance overlay; DualSense uses its active SDL HID report.
-- Add an asynchronous launcher action to generate and install an aspect-specific ultrawide HUD patch from the installed RomFS.
-- Bundle and install `TotKLauncher.exe` from the standalone setup wizard before its optional desktop shortcut step.
-- Add a standalone launcher Mod Manager with a live scan of `GAME/mods/`, one-click folder toggles, refresh, and an
-  Open Mods Folder action.
-- Treat the launcher's `.disabled` folder suffix as an inactive mod in the runtime scanner.
+---
+
+## [Beta 5e Hotfix] - 2026-11-05
+
+### 🎮 In-Game Overlay & Controller Features
+- **DualSense & Gamepad Battery Level Indicator:** Integrated battery percentage and charging status (`[🔋 XX%]` / `[⚡ Charging]`) directly into the compact two-line performance overlay next to the controller prompt icon.
+  - Queries active SDL HID reports for Sony DualSense controllers with zero latency impact.
+  - Falls back to `SDL_GetGamepadPowerInfo()` for standard Xbox, Switch Pro, and third-party gamepads.
+
+### 🖥️ Standalone Sony-Style PC Launcher (`TotKLauncher.exe`)
+- **Steam Deck & Handheld Preset:** One-click preset in the Display tab configuring native 1280×800 16:10 resolution, 40 FPS target limiter, AMD FSR Balanced upscaling, and optimized shadow geometry for battery efficiency.
+- **Linux & SteamOS Compatibility:** Added native platform fallbacks for Steam Deck / SteamOS (Proton / Wine launch paths, X11/Wayland display resolution detection, and Linux file manager open actions).
+- **Ultrawide HUD Auto-Patcher:** Automatically detects 21:9 (2560×1080, 3440×1440, 3840×1600) and 32:9 (5120×1440) resolutions, offering a 1-click async fix to patch RomFS layout archives and eliminate stretched UI elements.
+- **1-Click Mod Manager:** Built-in mod manager in *Digital Extras* that scans `GAME/mods/`, allows one-click mod enabling/disabling via `.disabled` suffixes, and directly opens the mod folder.
+- **Tactile Audio & UI Polish:** Zonai stone-carving audio cues on button clicks and hover states, custom high-contrast sliders with live numeric badges, and primary GPU auto-detection.
+
+### 📦 Setup Wizard & Engine Packaging
+- **Bundled Setup Wizard:** The standalone installer wizard (`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe`) now bundles `TotKLauncher.exe` and offers optional 1-click desktop shortcut creation.
+- **Game Version 1.4.3 Build System:** Updated build pipelines to fully support ExeFS v1.4.3 hashes, ensuring zero startup integrity errors.
+- **Developer Tools:** Added `tools/post_issue_comment.py` to automate authenticated GitHub issue communication using local git credential helpers.
+
+---
+
+## [Beta 5d] - 2026-11-04
+- Upstream sync with v0.3.10 codebase.
+- Master toggle for DLSS / DLAA with preset string configuration (`preset_k`, `preset_m`, `preset_l`).
+- Fixed fullscreen windowed startup glitch in `runtime/gfx_window_win.c`.
+- Fixed contact shadow duplicate ID bug in in-game menu.
+
+---
+
+## [Beta 5c] - 2026-11-03
+- Multi-vendor AI upscaler support (NVIDIA DLSS 4.5, AMD FSR 4.1.2, Intel XeSS).
+- Low latency Reflex integration (`VK_NV_low_latency2`).
+- 4-channel DualSense haptic streaming and adaptive trigger profiles.
