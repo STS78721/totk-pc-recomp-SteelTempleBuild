@@ -56,6 +56,15 @@ Our goal is not just to run the game on PC—it is to **elevate *Tears of the Ki
 - **OLED HDR10 Calibration:** Dedicated HDR profiles (Vivid, Clarity, Custom) with peak nits and HUD brightness balancing.
 - **Clean Grouped HUD:** Two-line high-contrast performance overlay with 0.1% and 1% low frametime hitch tracking and zero repetitive wording.
 
+### 5. 🛠️ Upstream v0.3.10 Engine Improvements & Fixes
+- **Falling Rain & Waterfall Splashes Fix (#91, #528):** Implemented Vulkan storage buffer write-back merge to resolve white rain flicker and disappearing waterfall splash effects.
+- **VRAM Memory Leak Elimination (#670):** Properly releases pinned texture memory copies, reducing long-session memory leakage from 44 MiB/min to <1 MiB/min.
+- **Grass Fire Spread Fix (#132):** Fixed the fire propagation flag (*officially credited to STS78721 in upstream v0.3.10 release notes*).
+- **Reduced PCIe Bandwidth & Copying Overhead (#698):** Drastically cuts discrete GPU upload pressure (e.g. Kakariko Village texture uploads reduced from 473 MiB down to 126 MiB).
+- **Direct PC Mouse Camera & In-Game Menu Cursor (#558, #605):** Fluid mouse look without analog deadzones on 1.4.3, plus interactive mouse pointer support in native game menus (inventory, shops, dialogue).
+- **PC Button Prompts (#585):** Native keyboard & mouse prompts displayed directly in-game.
+- **DLSS Stationary Jitter Fix (#701):** Removed conflicting motion patch and added character class bias masks to eliminate DLSS camera shimmer.
+
 ---
 
 ## 🗺️ The Horizon: Future Tech Roadmap 🔭
@@ -85,23 +94,23 @@ Every idea is welcome, whether you're a casual player enjoying Hyrule on your co
 
 ## 📥 Quick Start & Downloads
 
-Grab the latest prebuilt packages from our **[Latest Release (Beta 5d)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-5d)**:
+Grab the latest prebuilt packages from our **[Latest Release (Beta 5e)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-5e)**:
 
 ### ⚡ 1. Upgrading / Moving from Another Recomp (Zero Recompiling Needed)
 If you already have a working game folder or are switching from upstream recomp:
-1. Download **[`totk-pc-recomp-Beta-5d-update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5d/totk-pc-recomp-Beta-5d-update.zip)** (85 MB).
+1. Download **[`totk-pc-recomp-Beta-5e-update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/totk-pc-recomp-Beta-5e-update.zip)** (85 MB).
 2. Extract and replace **`totk.exe`** and **`totk.ini`** directly into your existing game directory.
 3. Launch `totk.exe`! Your existing save games, settings, and RomFS will work seamlessly.
 
 ### 🎮 2. New Players (Fresh Standalone Setup)
-1. Download **[`TotK-Recomp-SteelTemple-Beta-5d.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5d/TotK-Recomp-SteelTemple-Beta-5d.zip)** (473 MB).
+1. Download **[`TotK-Recomp-SteelTemple-Beta-5e.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/TotK-Recomp-SteelTemple-Beta-5e.zip)** (473 MB).
 2. Extract the archive into your chosen game folder (e.g. `C:\Games\Tears of the Kingdom PC\GAME`).
    - *This includes the precompiled `totk.exe`, `SDL3.dll`, all multi-vendor AI upscaler DLLs, controller configs, and aspect ratio patches.*
 3. Copy your dumped **`romfs`** folder (from your legally owned 1.4.3 game dump) into this folder.
 4. Launch **`totk.exe`** to play!
 
 ### 🛠️ 3. Modern Setup & Configuration Utility (Optional)
-- Download **[`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5d.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5d/The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5d.exe)** (or portable zip **`TotK-Setup-Modern-Beta-5d-windows.zip`**).
+- Download **[`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe)** (or portable zip **`TotK-Setup-Modern-Beta-5e-windows.zip`**).
 - Use this wizard to:
   - Configure multi-vendor AI upscalers (NVIDIA DLSS 4.5, DLSS-NR, Intel XeSS).
   - Install custom Controller UI prompt themes (PlayStation 5 DualSense, DualShock 4, Xbox).
