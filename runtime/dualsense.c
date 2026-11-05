@@ -44,6 +44,10 @@ static SDL_AudioDeviceID g_ds_device = 0;
 static bool g_ds_active = false;
 static PlatMutex g_ds_lock = PLAT_MUTEX_INIT;
 static SDL_Gamepad *g_current_pad = NULL;
+static SDL_Gamepad *g_battery_pad = NULL;
+static SDL_hid_device *g_battery_hid = NULL;
+static int g_battery_percent = -1, g_battery_charging;
+static uint64_t g_battery_retry_at;
 
 // State tracking for triggers & haptics
 static bool g_bow_drawn = false;
@@ -80,6 +84,63 @@ static bool dualsense_is_ps5_gamepad(SDL_Gamepad *pad) {
     const char *name = SDL_GetGamepadName(pad);
     if (name && (strstr(name, "DualSense") || strstr(name, "dualsense") || strstr(name, "PS5"))) return true;
     return false;
+}
+
+static void dualsense_battery_close(void) {
+    if (g_battery_hid) SDL_hid_close(g_battery_hid);
+    g_battery_hid = NULL;
+    g_battery_pad = NULL;
+    g_battery_percent = -1;
+    g_battery_charging = 0;
+    g_battery_retry_at = 0;
+}
+
+// Open a second, nonblocking HID read handle for the same controller SDL selected. This preserves SDL's gamepad and
+// output handles (including the speaker, haptics and adaptive triggers) while exposing the status byte SDL omits.
+static void dualsense_battery_open(SDL_Gamepad *pad) {
+    dualsense_battery_close();
+    if (!pad || !dualsense_is_ps5_gamepad(pad)) return;
+    g_battery_pad = pad;
+    g_battery_retry_at = plat_now_ns() + 5000000000ull;
+    SDL_JoystickID id = SDL_GetGamepadID(pad);
+    const char *active_path = SDL_GetGamepadPathForID(id);
+    SDL_hid_device_info *devices = SDL_hid_enumerate(SDL_GetGamepadVendor(pad), SDL_GetGamepadProduct(pad));
+    SDL_hid_device_info *match = NULL;
+    for (SDL_hid_device_info *dev = devices; dev; dev = dev->next) {
+        if (active_path && dev->path && SDL_strcasecmp(active_path, dev->path) == 0) { match = dev; break; }
+        if (!active_path && !match) match = dev;
+    }
+    if (match && match->path) g_battery_hid = SDL_hid_open_path(match->path);
+    SDL_hid_free_enumeration(devices);
+    if (g_battery_hid && SDL_hid_set_nonblocking(g_battery_hid, 1) != 0) {
+        SDL_hid_close(g_battery_hid);
+        g_battery_hid = NULL;
+    }
+}
+
+// DualSense USB report 0x01 carries status at byte 53; Bluetooth report 0x31 carries it at byte 54. Capacity is in
+// 10% buckets (report values 0..10), and the upper nibble is the charging state (0x1 charging, 0x2 full).
+static void dualsense_battery_poll(SDL_Gamepad *pad) {
+    if (pad != g_battery_pad || (!g_battery_hid && plat_now_ns() >= g_battery_retry_at)) dualsense_battery_open(pad);
+    if (!g_battery_hid) return;
+    unsigned char report[128];
+    int n = SDL_hid_read(g_battery_hid, report, sizeof report);
+    if (n < 0) {
+        SDL_hid_close(g_battery_hid);
+        g_battery_hid = NULL;
+        g_battery_retry_at = plat_now_ns() + 5000000000ull;
+        return;
+    }
+    if (n <= 0) return;
+    size_t status_at = report[0] == 0x01 ? 53 : report[0] == 0x31 ? 54 : sizeof report;
+    if (status_at >= (size_t)n) return;
+    unsigned char status = report[status_at];
+    unsigned capacity = status & 0x0f;
+    unsigned charging = status >> 4;
+    if (capacity > 10 || (charging != 0 && charging != 1 && charging != 2)) return;
+    g_battery_percent = charging == 2 ? 100 : (int)(capacity * 10 + 5);
+    if (g_battery_percent > 100) g_battery_percent = 100;
+    g_battery_charging = charging == 1;
 }
 
 void dualsense_init(void) {
@@ -306,15 +367,16 @@ static void send_trigger_effects(SDL_Gamepad *pad, uint8_t r2_mode, uint8_t r2_p
 }
 
 void dualsense_poll(void *sdl_gamepad, const uint8_t *pd, int16_t l2_raw, int16_t r2_raw) {
-    if (!cfg_bool("TOTK_DUALSENSE")) return;
-
     SDL_Gamepad *pad = (SDL_Gamepad *)sdl_gamepad;
     if (!pad) return;
 
     // Strict hardware gating: only PS5 DualSense controllers run DualSense routines
     if (!dualsense_is_ps5_gamepad(pad)) {
+        if (pad == g_battery_pad) dualsense_battery_close();
         return;
     }
+    dualsense_battery_poll(pad);
+    if (!cfg_bool("TOTK_DUALSENSE")) return;
     g_current_pad = pad;
 
     static bool led_initialized = false;
@@ -444,7 +506,18 @@ bool dualsense_active(void) {
     return g_ds_active;
 }
 
+int dualsense_power_info(void *sdl_gamepad, int *percent, int *charging) {
+    SDL_Gamepad *pad = (SDL_Gamepad *)sdl_gamepad;
+    if (!pad || pad != g_battery_pad || !dualsense_is_ps5_gamepad(pad) || g_battery_percent < 0) return 0;
+    if (percent) *percent = g_battery_percent;
+    if (charging) *charging = g_battery_charging;
+    return 1;
+}
+
+void dualsense_power_reset(void) { dualsense_battery_close(); }
+
 void dualsense_cleanup(void) {
+    dualsense_battery_close();
     plat_mutex_lock(&g_ds_lock);
     if (g_current_pad) {
         // 1. Reset adaptive triggers back to normal free mode

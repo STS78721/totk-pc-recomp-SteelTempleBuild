@@ -42,6 +42,8 @@ Our goal is not just to run the game on PC—it is to **elevate *Tears of the Ki
 - **Interactive High-Contrast Controls:** Custom-engineered `SonySlider` widgets with active gold progress fills, glowing thumb indicators, and high-visibility digital readouts.
 - **Startup Flexibility:** Includes a `[✓] SHOW LAUNCHER` toggle (boot directly to `totk.exe` or hold `Shift` on launch to bring it back), plus an optional desktop shortcut pointing straight to the launcher.
 - **Direct GitHub Community Integration:** Built-in 1-click button connecting players straight to our repository for updates and community discussions.
+- **Controller Battery Overlay:** The compact performance HUD shows the active controller's reported battery level or charging state when available.
+- **Ultrawide HUD Patcher:** The launcher offers an asynchronous 21:9/32:9 layout patch generated from the installed RomFS.
 
 ---
 
@@ -135,6 +137,7 @@ If you already have a working game folder or are switching from upstream recomp:
   - Install custom Controller UI prompt themes (PlayStation 5 DualSense, DualShock 4, Xbox).
   - Automatically detect and migrate your saves from Yuzu, Ryujinx, or previous recomp builds.
   - Create a 1-click Desktop shortcut pointing directly to the new Sony-style Launcher!
+  - The standalone setup wizard includes and installs `TotKLauncher.exe` before creating the optional shortcut.
 
 ---
 

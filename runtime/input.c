@@ -42,6 +42,8 @@ static int pad_east_a;               // ... and labels its east face button A (N
 static int pad_layout = -1;          // PAD_LAYOUT_* in effect for the open gamepad, -1 to pick again; live (cfg_version)
 static unsigned pad_layout_seen;
 static volatile int32_t pad_layout_shown = -1;   // pad_layout for the menu (any thread), -1 without a gamepad
+static uint64_t pad_power_next;
+static int pad_power_percent = -1, pad_power_charging;
 static SDL_JoystickID sensor_pad;    // the gamepad whose sensors the motion thread set up, 0 none
 static int sensor_ok;                // ... and it has both sensors, enabled
 static int motion_thread;            // 0 not started, 1 running, -1 off (TOTK_MOTION=0, no SDL)
@@ -401,7 +403,9 @@ static void stick(SDL_GamepadAxis ax, SDL_GamepadAxis ay, float dead, int32_t ou
 static void scan_pads(void) {
     if (pad && SDL_GamepadConnected(pad)) return;
     if (pad) {
+        dualsense_power_reset();
         SDL_CloseGamepad(pad); pad = NULL; sensor_pad = 0; sensor_ok = 0;
+        pad_power_percent = -1; pad_power_charging = 0; pad_power_next = 0;
         plat_xchg32(&pad_layout_shown, -1);
         for (int i = 0; i < 4; i++) plat_xchg32(&pad_labels[i], PAD_LABEL_NONE);
         rt_log("input: gamepad disconnected");
@@ -411,6 +415,7 @@ static void scan_pads(void) {
     for (int i = 0; ids && i < n && !pad; i++) pad = SDL_OpenGamepad(ids[i]);
     SDL_free(ids);
     if (!pad) return;
+    pad_power_percent = -1; pad_power_charging = 0; pad_power_next = 0;
     pad_rumble = SDL_GetBooleanProperty(SDL_GetGamepadProperties(pad), SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
     pad_east_a = SDL_GetGamepadButtonLabel(pad, SDL_GAMEPAD_BUTTON_EAST) == SDL_GAMEPAD_BUTTON_LABEL_A;
     for (int i = 0; i < 4; i++) {
@@ -567,6 +572,41 @@ static int pad_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
     stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, stick_dead_get(0), sl);
     stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, stick_dead_get(1), sr);
     return 1;
+}
+
+int input_pad_power_info(int *percent, int *charging) {
+    int ok = 0;
+    plat_mutex_lock(&lock);
+    if (state == 1 && pad && SDL_GamepadConnected(pad)) {
+        uint64_t now = plat_now_ns();
+        if (now >= pad_power_next) {
+            pad_power_percent = -1;
+            pad_power_charging = 0;
+            int level = -1, is_charging = 0;
+            if (!dualsense_power_info(pad, &level, &is_charging)) {
+                SDL_PowerState ps = SDL_GetGamepadPowerInfo(pad, &level);
+                if (ps != SDL_POWERSTATE_ERROR && ps != SDL_POWERSTATE_UNKNOWN && ps != SDL_POWERSTATE_NO_BATTERY &&
+                    level >= 0 && level <= 100) {
+                    is_charging = ps == SDL_POWERSTATE_CHARGING;
+                } else {
+                    level = -1;
+                }
+            }
+            pad_power_percent = level;
+            pad_power_charging = is_charging;
+            pad_power_next = now + 5000000000ull;
+        }
+        if (pad_power_percent >= 0) {
+            if (percent) *percent = pad_power_percent;
+            if (charging) *charging = pad_power_charging;
+            ok = 1;
+        }
+    } else {
+        pad_power_percent = -1;
+        pad_power_next = 0;
+    }
+    plat_mutex_unlock(&lock);
+    return ok;
 }
 
 int input_pad_stick_percent(double pct[2]) {

@@ -37,6 +37,10 @@ void dualsense_play_sfx(DualSenseSfx sfx);
 // Check if a DualSense controller with speaker audio & adaptive triggers is actively connected
 bool dualsense_active(void);
 
+// SDL's HID backend obtains the DualSense battery state from its active controller report. Called under input.c's lock.
+int dualsense_power_info(void *sdl_gamepad, int *percent, int *charging);
+void dualsense_power_reset(void);
+
 // Shutdown and release audio streams
 void dualsense_cleanup(void);
 

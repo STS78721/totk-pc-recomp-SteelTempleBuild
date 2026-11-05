@@ -13,6 +13,7 @@ Features:
 """
 
 import os
+import shutil
 import sys
 import threading
 import time
@@ -150,6 +151,24 @@ class ModernTotkInstaller(ctk.CTk):
             if os.path.exists(c):
                 return c
         return None
+
+    def find_launcher_exe(self):
+        """Find the launcher bundled by PyInstaller, or the source build when running from the checkout."""
+        bundle_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+        candidates = [bundle_dir / "assets" / "TotKLauncher.exe",
+                      Path(__file__).resolve().parent.parent / "launcher" / "dist" / "TotKLauncher.exe"]
+        return next((path for path in candidates if path.is_file()), None)
+
+    def install_launcher(self, target):
+        source = self.find_launcher_exe()
+        if not source:
+            self.log("[!] TotKLauncher.exe was not bundled; the game can still start with totk.exe.")
+            return False
+        destination = Path(target) / "TotKLauncher.exe"
+        if source.resolve() != destination.resolve():
+            shutil.copy2(source, destination)
+        self.log("[✓] Sony-style launcher installed to TotKLauncher.exe.")
+        return True
 
     def auto_find_file(self, extensions, keywords):
         search_dirs = [
@@ -474,6 +493,9 @@ class ModernTotkInstaller(ctk.CTk):
         self.progress_bar.set(0.15)
         self.log("[✓] Target directory initialized.")
         time.sleep(0.5)
+
+        # Put the standalone launcher in place before the optional desktop shortcut is created.
+        self.install_launcher(target)
 
         # 2. Vendor SDKs
         if self.var_install_sdks.get():

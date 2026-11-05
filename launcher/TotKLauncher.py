@@ -9,6 +9,7 @@ import re
 import subprocess
 import webbrowser
 import threading
+import runpy
 import urllib.request
 import urllib.error
 import ctypes
@@ -612,12 +613,112 @@ class SonySettingsDialog(tk.Toplevel):
         self.create_row_dropdown(f, "Window Resolution", "window_size",
                                  resolutions, self.get_val("window_size", self.display_resolution), "Target display resolution for rendering & window bounds.")
         self.resolution_combo = f.winfo_children()[-1].winfo_children()[-1]
+        self.resolution_combo.bind("<<ComboboxSelected>>", self.on_resolution_changed)
         frame_rates = sorted(set(["30", "60", "90", "120", "144", str(self.display_refresh), "display"]),
                              key=lambda value: (value == "display", int(value) if value != "display" else 999))
         self.create_row_dropdown(f, "Frame Rate Limit", "fps_limit",
                                  frame_rates, self.get_val("fps_limit", str(self.display_refresh)),
                                  "Max frame rate cap. 'display' automatically synchronizes with monitor Hz.")
         self.fps_combo = f.winfo_children()[-1].winfo_children()[-1]
+
+        self.ultrawide_card = tk.Frame(f, bg=COLOR_CARD, padx=14, pady=10,
+                                       highlightthickness=1, highlightbackground=COLOR_CARD_BORDER)
+        uw_left = tk.Frame(self.ultrawide_card, bg=COLOR_CARD)
+        uw_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.ultrawide_title = tk.Label(uw_left, text="Ultrawide HUD layout available",
+                                        font=("Segoe UI", 10, "bold"), fg=COLOR_GOLD, bg=COLOR_CARD)
+        self.ultrawide_title.pack(anchor="w")
+        self.ultrawide_status = tk.Label(uw_left, text="Generate a matching layout patch from the installed RomFS.",
+                                         font=("Segoe UI", 8), fg=COLOR_TEXT_DIM, bg=COLOR_CARD,
+                                         wraplength=340, justify="left")
+        self.ultrawide_status.pack(anchor="w", pady=(3, 0))
+        self.ultrawide_button = tk.Button(self.ultrawide_card, text="APPLY ULTRAWIDE HUD FIX",
+                                          command=self.apply_ultrawide_patch, font=("Segoe UI", 9, "bold"),
+                                          fg="#000000", bg=COLOR_GOLD, activebackground=COLOR_GOLD_HOVER,
+                                          bd=0, padx=12, pady=8, cursor="hand2")
+        self.ultrawide_button.pack(side=tk.RIGHT, padx=(12, 0))
+        self.update_ultrawide_card()
+
+    @staticmethod
+    def ultrawide_kind(resolution):
+        try:
+            width, height = (int(part) for part in resolution.lower().split("x", 1))
+            ratio = width / height
+        except (ValueError, ZeroDivisionError):
+            return None
+        if 3.3 <= ratio <= 3.8:
+            return "32:9"
+        if 2.25 <= ratio <= 2.55:
+            return "21:9"
+        return None
+
+    def update_ultrawide_card(self):
+        kind = self.ultrawide_kind(self.vars["window_size"].get())
+        if kind:
+            self.ultrawide_title.config(text=f"{kind} Ultrawide HUD layout available")
+            self.ultrawide_card.pack(fill=tk.X, padx=20, pady=(5, 10))
+        else:
+            self.ultrawide_card.pack_forget()
+
+    def on_resolution_changed(self, _event=None):
+        self.update_ultrawide_card()
+
+    def apply_ultrawide_patch(self):
+        resolution = self.vars["window_size"].get()
+        kind = self.ultrawide_kind(resolution)
+        if not kind:
+            self.update_ultrawide_card()
+            return
+        romfs = GAME_DIR / "romfs"
+        index_path = romfs / "index.json"
+        image_path = romfs / "romfs.bin"
+        if not index_path.is_file() or not image_path.is_file():
+            self.ultrawide_status.config(text="Installed RomFS (romfs/index.json and romfs/romfs.bin) was not found.",
+                                         fg="#ff7b7b")
+            return
+        try:
+            romfs_index = json.loads(index_path.read_text(encoding="utf-8"))
+            paths = {entry.get("path", "") for entry in romfs_index.get("files", [])}
+            version = "v143" if "UI/LayoutArchive/Common.Product.140.Nin_NX_NVN.blarc.zs" in paths else "v121"
+        except (OSError, ValueError, TypeError) as exc:
+            self.ultrawide_status.config(text=f"Could not read the RomFS index: {exc}", fg="#ff7b7b")
+            return
+        bundle_tool = get_base_dir() / "tools" / "make_romfs_patches.py"
+        if not bundle_tool.is_file():
+            bundle_tool = get_base_dir().parent / "tools" / "make_romfs_patches.py"
+        if not bundle_tool.is_file():
+            self.ultrawide_status.config(text="The bundled HUD patch tool was not found.", fg="#ff7b7b")
+            return
+        out = GAME_DIR / f"romfs-patches-{resolution}"
+        self.ultrawide_button.config(state=tk.DISABLED, text="APPLYING…")
+        self.ultrawide_status.config(text="Building the HUD layout from the installed RomFS…", fg=COLOR_TEXT_DIM)
+        threading.Thread(target=self._ultrawide_patch_worker,
+                         args=(resolution, kind, version, bundle_tool, romfs, out), daemon=True).start()
+
+    def _ultrawide_patch_worker(self, resolution, kind, version, tool_path, romfs, out):
+        try:
+            if getattr(sys, "frozen", False):
+                command = [sys.executable, "--run-ultrawide-patcher", resolution, version, str(romfs), str(out)]
+            else:
+                command = [sys.executable, str(Path(__file__).resolve()), "--run-ultrawide-patcher",
+                           resolution, version, str(romfs), str(out)]
+            result = subprocess.run(command, cwd=str(GAME_DIR), capture_output=True, text=True, timeout=900)
+            if result.returncode != 0 or not (out / "manifest.tsv").is_file():
+                detail = (result.stderr or result.stdout or "Patch tool failed without diagnostic output.").strip()
+                raise RuntimeError(detail[-1200:])
+            message = f"Ultrawide {kind} HUD patch applied successfully!"
+            color = COLOR_ACCENT_GREEN
+        except Exception as exc:
+            message = f"Could not apply the HUD patch: {exc}"
+            color = "#ff7b7b"
+        try:
+            self.after(0, lambda: self._finish_ultrawide_patch(message, color))
+        except tk.TclError:
+            pass
+
+    def _finish_ultrawide_patch(self, message, color):
+        self.ultrawide_button.config(state=tk.NORMAL, text="APPLY ULTRAWIDE HUD FIX")
+        self.ultrawide_status.config(text=message, fg=color)
 
     def on_monitor_changed(self, _event=None):
         self.target_monitor = self.monitor_labels.get(self.target_display_var.get(), self.target_monitor)
@@ -628,6 +729,7 @@ class SonySettingsDialog(tk.Toplevel):
             resolution_values.insert(0, self.display_resolution)
         self.resolution_combo.configure(values=resolution_values)
         self.vars["window_size"].set(self.display_resolution)
+        self.update_ultrawide_card()
         fps_values = list(self.fps_combo.cget("values"))
         refresh = str(self.display_refresh)
         if refresh not in fps_values:
@@ -1093,6 +1195,17 @@ class SonyLauncherApp(tk.Tk):
 
 
 def main():
+    if len(sys.argv) >= 6 and sys.argv[1] == "--run-ultrawide-patcher":
+        resolution, version, romfs, out = sys.argv[2:6]
+        candidates = [get_base_dir() / "tools" / "make_romfs_patches.py",
+                      get_base_dir().parent / "tools" / "make_romfs_patches.py"]
+        tool = next((path for path in candidates if path.is_file()), None)
+        if tool is None:
+            raise FileNotFoundError("Bundled tools/make_romfs_patches.py was not found.")
+        sys.argv = [str(tool), "--version", version, "--aspect", resolution, "--romfs", romfs, "--out", out]
+        runpy.run_path(str(tool), run_name="__main__")
+        return
+
     cfg = load_launcher_config()
     
     shift_pressed = False

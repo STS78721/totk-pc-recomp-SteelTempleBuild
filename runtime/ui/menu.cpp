@@ -1636,6 +1636,7 @@ static char g_perf_fps_num[32];
 static char g_perf_ms_num[32];
 static char g_perf_upscaler[64];
 static char g_perf_line2[160];
+static char g_perf_battery[24];
 static char g_perf_fg_badge[32];
 static char g_perf_nr_badge[48];
 static int  g_perf_theme;                // 0: NVIDIA green, 1: AMD red, 2: Cyber cyan, 3: Intel blue
@@ -1737,6 +1738,14 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
                 else snprintf(g_perf_fps_num, sizeof g_perf_fps_num, "%.1f FPS", eff_fps);
             }
             snprintf(g_perf_ms_num, sizeof g_perf_ms_num, "%.1f ms", eff_ms);
+
+            int battery_percent = -1, battery_charging = 0;
+            if (input_pad_power_info(&battery_percent, &battery_charging)) {
+                if (battery_charging) snprintf(g_perf_battery, sizeof g_perf_battery, "[CHG]");
+                else snprintf(g_perf_battery, sizeof g_perf_battery, "[BAT %d%%]", battery_percent);
+            } else {
+                g_perf_battery[0] = 0;
+            }
 
             // Compute 1% and 0.1% low FPS from sorted frame times in the rolling window
             if (g_dt_count >= 10) {
@@ -2190,11 +2199,13 @@ static void perf_draw(const MenuTarget *t, float scale) {
     float nr_pill_w = g_perf_nr_badge[0] ? (sz_nr.x + 6.0f * scale) : 0.0f;
 
     ImVec2 sz_l2_tail = g_perf_line2[0] ? text_sz(g_perf_line2) : ImVec2(0, 0);
+    ImVec2 sz_battery = g_perf_battery[0] ? text_sz(g_perf_battery) : ImVec2(0, 0);
 
     float line2_w = sz_up.x;
     if (fg_pill_w > 0) line2_w += spacing_x + fg_pill_w;
     if (nr_pill_w > 0) line2_w += spacing_x + nr_pill_w;
     if (sz_l2_tail.x > 0) line2_w += spacing_x + sz_l2_tail.x;
+    if (sz_battery.x > 0) line2_w += spacing_x + sz_battery.x;
     float line2_h = font_sz;
 
     float card_w = fmaxf(line1_w, line2_w) + pad_x * 2.0f;
@@ -2295,6 +2306,11 @@ static void perf_draw(const MenuTarget *t, float scale) {
     if (sz_l2_tail.x > 0) {
         l2_x += spacing_x;
         dl->AddText(font, font_sz, ImVec2(l2_x, line2_y), IM_COL32(175, 190, 205, 225), g_perf_line2);
+        l2_x += sz_l2_tail.x;
+    }
+    if (sz_battery.x > 0) {
+        l2_x += spacing_x;
+        dl->AddText(font, font_sz, ImVec2(l2_x, line2_y), IM_COL32(135, 225, 180, 240), g_perf_battery);
     }
 }
 extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const char **shot) {
