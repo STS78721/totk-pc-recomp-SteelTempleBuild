@@ -780,19 +780,7 @@ static void row_shadow_range(void) {
 static void rows_ao(void) {
     static const char *const vals[] = {"native", "ssao", "hbao", "xegtao", "off"};
     static const char *const names[] = {"Native AO (Default)", "SSAO (Enhanced)", "HBAO (Horizon-Based)", "Intel XeGTAO (Ground Truth)", "Off"};
-    if (opt_choice_list("TOTK_AO_MODE", UI_MENU_AO_MODE, vals, names, 5, UI_MENU_AO_MODE_DESC)) {
-        const char *m = cfg_value("TOTK_AO_MODE");
-        if (!strcmp(m, "xegtao")) cfg_set("TOTK_CONTACT_SHADOWS", "100");
-        else if (!strcmp(m, "hbao")) cfg_set("TOTK_CONTACT_SHADOWS", "100");
-        else if (!strcmp(m, "ssao")) cfg_set("TOTK_CONTACT_SHADOWS", "50");
-        else cfg_set("TOTK_CONTACT_SHADOWS", "0");
-        cfg_save();
-    }
-    if (opt_slider("TOTK_CONTACT_SHADOWS", UI_MENU_CONTACT_SHADOWS, 0, 100, UI_MENU_CONTACT_SHADOWS_DESC, 10, "%.0f %%")) {
-        int s = cfg_int("TOTK_CONTACT_SHADOWS");
-        cfg_set("TOTK_AO_MODE", s >= 80 ? "xegtao" : s >= 50 ? "hbao" : s >= 30 ? "ssao" : "native");
-        cfg_save();
-    }
+    opt_choice_list("TOTK_AO_MODE", UI_MENU_AO_MODE, vals, names, 5, UI_MENU_AO_MODE_DESC);
 }
 
 static void row_gpu(void) {
