@@ -35,6 +35,7 @@ COLOR_TRACK_ACTIVE = "#ffd24d"
 GITHUB_URL = "https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild"
 VERSION_STRING = "Beta 5e Hotfix"
 RELEASES_API_URL = "https://api.github.com/repos/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest"
+MOD_DISABLED_SUFFIX = ".disabled"
 
 class _DEVMODE(ctypes.Structure):
     _fields_ = [("dmDeviceName", wintypes.WCHAR * 32), ("dmSpecVersion", wintypes.WORD),
@@ -206,6 +207,7 @@ def find_game_dir():
 GAME_DIR = find_game_dir()
 INI_PATH = GAME_DIR / "totk.ini"
 CONFIG_PATH = GAME_DIR / "launcher_config.json"
+MODS_DIR = GAME_DIR / "mods"
 
 
 # --- Config File & INI Handling ---
@@ -273,6 +275,35 @@ def save_ini_settings(ini_file, updates):
     with open(ini_file, "w", encoding="utf-8") as f:
         f.writelines(lines)
     return True
+
+def scan_mod_folders(mods_dir=MODS_DIR):
+    """List immediate mod directories, including folders disabled with the .disabled suffix."""
+    mods_dir = Path(mods_dir)
+    mods_dir.mkdir(parents=True, exist_ok=True)
+    found = []
+    for folder in mods_dir.iterdir():
+        if not folder.is_dir():
+            continue
+        disabled = folder.name.casefold().endswith(MOD_DISABLED_SUFFIX)
+        name = folder.name[:-len(MOD_DISABLED_SUFFIX)] if disabled else folder.name
+        if not name:
+            continue
+        found.append({"name": name, "path": folder, "enabled": not disabled})
+    return sorted(found, key=lambda mod: (mod["name"].casefold(), mod["name"], not mod["enabled"]))
+
+def set_mod_folder_enabled(folder, enabled):
+    """Enable or disable one mod by restoring or appending the reserved suffix."""
+    folder = Path(folder)
+    is_disabled = folder.name.casefold().endswith(MOD_DISABLED_SUFFIX)
+    if bool(enabled) == (not is_disabled):
+        return folder
+    if enabled:
+        target = folder.with_name(folder.name[:-len(MOD_DISABLED_SUFFIX)])
+    else:
+        target = folder.with_name(folder.name + MOD_DISABLED_SUFFIX)
+    if target.exists():
+        raise FileExistsError(f"Cannot rename mod because '{target.name}' already exists.")
+    return folder.rename(target)
 
 
 # --- High-Contrast Custom Slider (Sony / Nixxes Style) ---
@@ -721,6 +752,97 @@ class SonySettingsDialog(tk.Toplevel):
             self.sound_effects_var.set(True)
 
 
+# --- Standalone 1-click Mod Manager ---
+class ModsManagerDialog(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("TotK Mod Manager")
+        self.geometry("720x500")
+        self.minsize(600, 380)
+        self.configure(bg=COLOR_BG_DARK)
+        self.transient(parent)
+        self.parent_app = parent
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+
+        header = tk.Frame(self, bg=COLOR_CARD, padx=22, pady=14)
+        header.pack(fill=tk.X)
+        tk.Label(header, text="MOD MANAGER", font=("Segoe UI", 14, "bold"),
+                 fg=COLOR_GOLD, bg=COLOR_CARD).pack(anchor="w")
+        tk.Label(header, text="Toggle installed mods. Disabled folders are kept as <mod>.disabled.",
+                 font=("Segoe UI", 9), fg=COLOR_TEXT_DIM, bg=COLOR_CARD).pack(anchor="w", pady=(3, 0))
+
+        list_frame = tk.Frame(self, bg=COLOR_BG_DARK)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=14)
+        self.list_canvas = tk.Canvas(list_frame, bg=COLOR_BG_DARK, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.list_canvas.yview)
+        self.list_canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.list_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.rows = tk.Frame(self.list_canvas, bg=COLOR_BG_DARK)
+        self.rows_window = self.list_canvas.create_window((0, 0), window=self.rows, anchor="nw")
+        self.rows.bind("<Configure>", lambda _e: self.list_canvas.configure(scrollregion=self.list_canvas.bbox("all")))
+        self.list_canvas.bind("<Configure>", lambda e: self.list_canvas.itemconfigure(self.rows_window, width=e.width))
+
+        footer = tk.Frame(self, bg=COLOR_CARD, height=62, padx=18)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
+        footer.pack_propagate(False)
+        tk.Button(footer, text="OPEN MODS FOLDER", command=self.open_mods_folder,
+                  font=("Segoe UI", 9, "bold"), fg="#000000", bg=COLOR_GOLD,
+                  activebackground=COLOR_GOLD_HOVER, bd=0, padx=14, pady=8, cursor="hand2").pack(side=tk.LEFT, pady=12)
+        tk.Button(footer, text="REFRESH", command=self.refresh,
+                  font=("Segoe UI", 9, "bold"), fg=COLOR_WHITE, bg=COLOR_BUTTON_HOVER,
+                  activebackground=COLOR_GOLD, bd=0, padx=14, pady=8, cursor="hand2").pack(side=tk.LEFT, padx=10, pady=12)
+        tk.Button(footer, text="CLOSE", command=self.destroy,
+                  font=("Segoe UI", 9, "bold"), fg=COLOR_WHITE, bg=COLOR_BUTTON_HOVER,
+                  activebackground=COLOR_GOLD, bd=0, padx=14, pady=8, cursor="hand2").pack(side=tk.RIGHT, pady=12)
+
+        self.refresh()
+        monitor = next((item for item in enumerate_displays()
+                        if item["device"] == parent.launcher_cfg.get("target_display")), None)
+        if monitor:
+            place_window_on_monitor(self, monitor)
+
+    def refresh(self):
+        for child in self.rows.winfo_children():
+            child.destroy()
+        mods = scan_mod_folders()
+        if not mods:
+            tk.Label(self.rows, text="No mod folders found yet. Open the folder below and drop mods into it.",
+                     font=("Segoe UI", 10), fg=COLOR_TEXT_DIM, bg=COLOR_BG_DARK,
+                     wraplength=540, justify="left").pack(anchor="w", padx=10, pady=18)
+            return
+        for mod in mods:
+            row = tk.Frame(self.rows, bg=COLOR_CARD, padx=12, pady=10,
+                           highlightthickness=1, highlightbackground=COLOR_CARD_BORDER)
+            row.pack(fill=tk.X, pady=4)
+            enabled = tk.BooleanVar(value=mod["enabled"])
+            check = tk.Checkbutton(row, text=mod["name"], variable=enabled,
+                                   command=lambda path=mod["path"], var=enabled: self.toggle_mod(path, var),
+                                   font=("Segoe UI", 10, "bold"), fg=COLOR_WHITE, bg=COLOR_CARD,
+                                   activebackground=COLOR_CARD, activeforeground=COLOR_GOLD,
+                                   selectcolor=COLOR_TAB_ACTIVE, bd=0, highlightthickness=0, cursor="hand2")
+            check.pack(side=tk.LEFT, anchor="w")
+            label = "ENABLED" if mod["enabled"] else "DISABLED"
+            color = COLOR_ACCENT_GREEN if mod["enabled"] else COLOR_GOLD
+            tk.Label(row, text=label, font=("Segoe UI", 8, "bold"), fg=color,
+                     bg=COLOR_CARD).pack(side=tk.RIGHT, padx=8)
+
+    def toggle_mod(self, folder, variable):
+        try:
+            set_mod_folder_enabled(folder, variable.get())
+            self.refresh()
+        except OSError as exc:
+            messagebox.showerror("Mod Toggle Failed", str(exc), parent=self)
+            self.refresh()
+
+    def open_mods_folder(self):
+        try:
+            MODS_DIR.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(MODS_DIR))
+        except Exception as exc:
+            messagebox.showerror("Cannot Open Mods Folder", str(exc), parent=self)
+
+
 # --- Sony-style Main Launcher Window ---
 class SonyLauncherApp(tk.Tk):
     def __init__(self):
@@ -949,6 +1071,7 @@ class SonyLauncherApp(tk.Tk):
 
         menu.add_command(label="🌐  Visit GitHub Repository", command=lambda: webbrowser.open(GITHUB_URL))
         menu.add_command(label="⬆  Check for Updates", command=self.check_for_updates)
+        menu.add_command(label="🧩  Open Mod Manager", command=self.open_mod_manager)
         menu.add_separator()
         menu.add_command(label="📁  Open Mods Folder (mods/)", command=lambda: open_dir("mods", "Mods"))
         menu.add_command(label="💾  Open Save Directory (profile/save/)", command=lambda: open_dir("profile/save", "Saves"))
@@ -957,6 +1080,9 @@ class SonyLauncherApp(tk.Tk):
         menu.add_command(label="🎮  View In-Game Controller Guide", command=self.open_controller_guide)
 
         menu.tk_popup(self.winfo_pointerx(), self.winfo_pointery())
+
+    def open_mod_manager(self):
+        ModsManagerDialog(self)
 
     def open_controller_guide(self):
         guide_p = GAME_DIR / "CONTROLLER_GUIDE.txt"

@@ -6,8 +6,9 @@ packs, gameplay and text changes from GameBanana and similar sites, TKMM's merge
 
 ## Install a mod
 
-1. Open the settings menu (F1, Esc, or Minus and Plus together on a controller), go to the Mods tab and choose
-   **Open mods folder**. That is the `mods` folder next to `totk.exe`; the menu creates it when it is missing.
+1. In the standalone launcher, open **Digital Extras → Open Mod Manager → Open Mods Folder**. Or open the settings
+   menu (F1, Esc, or Minus and Plus together on a controller), go to the Mods tab and choose **Open mods folder**.
+   Both open the `mods` folder next to `totk.exe`; the menu creates it when it is missing.
 2. Make one folder per mod in it and unpack the mod's archive into that folder. The mod's own folders (`romfs`,
    `exefs`, `cheats`) must sit directly inside the mod's folder:
 
@@ -37,8 +38,11 @@ The Mods tab lists every folder in `mods`. Select a mod and press A or Enter to 
 or Ctrl+Up moves it up, the left face button or Ctrl+Down moves it down. When two mods change the same file, the
 higher one wins; the lower mod's row says how many of its files the higher one covers. Changes apply after a restart.
 
-The menu saves the order and the switches in `totk.ini`, under `[mods]`, by folder name: `mods_order` and
-`mods_disabled`. A folder the list does not name yet, such as a new or renamed one, goes below the named ones.
+The in-game menu saves the order and switches in `totk.ini`, under `[mods]`, by folder name: `mods_order` and
+`mods_disabled`. A folder the list does not name yet, such as a new or renamed one, goes below the named ones. The
+standalone launcher's Mod Manager instead switches a folder by appending or removing `.disabled` (for example,
+`Better Grass.disabled`). The game skips folders with that suffix. Keep `.disabled` reserved for this purpose; do not
+name an installed mod folder with that suffix yourself.
 
 ### Mods that change the same files
 

@@ -304,7 +304,8 @@ static int exefs_check(ModInfo *m, const char *path) {
 static int scan_cb(const char *name, int kind, uint64_t size, void *ctx) {
     (void)size;
     const char *disabled = ctx;
-    if (kind != PLAT_FS_DIR) return 1;
+    // The standalone launcher disables a mod by renaming its folder; keep it out of the active scan.
+    if (kind != PLAT_FS_DIR || ends_with_ci(name, ".disabled")) return 1;
     if (nmods == MAX_MODS) {
         rt_log("mods: more than %d folders in %s; the rest are left out", MAX_MODS, dir);
         return 0;

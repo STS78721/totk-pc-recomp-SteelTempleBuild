@@ -65,6 +65,7 @@ int probe_mods(void) {
         "G/romfs/z.bin", "G/exefs/1234.ips", "Ultra \xD0\x96/romfs/u.bin",
         "H/romfs/h.bin", "H/exefs/subsdk9", "I/romfs/i.bin", "I/exefs/main", "J/cheats/0123456789ABCDEF.txt",
         "K/romfslite/k.bin", "L/romfs/l.bin", "L/cheats/0123456789ABCDEF.txt", "L/exefs/main.npdm",
+        "N.disabled/romfs/n.bin",
     };
     for (size_t i = 0; i < sizeof files / sizeof *files; i++) put(root, files[i]);
     // an IPS file for this game's main (any file counts as one when main cannot be read), in Atmosphere's layout
@@ -81,6 +82,7 @@ int probe_mods(void) {
                                         "Ultra \xD0\x96"};
     enum { N = sizeof order / sizeof *order };
     CHECK(mods_count() == N, "fourteen mod folders");
+    CHECK(mods_at(N) == NULL, ".disabled folders are not scanned as active mods");
     int in_order = mods_count() == N;
     for (int i = 0; in_order && i < N; i++) in_order = EQ(mods_at(i)->name, order[i]);
     CHECK(in_order, "order: mods_order first, the rest by name");

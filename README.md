@@ -38,6 +38,7 @@ Our goal is not just to run the game on PC—it is to **elevate *Tears of the Ki
 - **Troubleshoot & Prevent Crashes:** If an unsupported resolution or display mode ever causes an out-of-range monitor error or black screen, fix it externally without editing raw config files.
 - **Zero In-Game Stuttering:** Pre-configure DLSS 4.5, AMD FSR 4.1.2, Intel XeSS, Frame Generation, and NVIDIA Reflex Boost so your game boots perfectly dialed in with optimal Vulkan pipeline pre-building.
 - **Digital Extras One-Click Directory Hub:** Direct 1-click access to the `mods/` directory, save file location (`profile/save/`), `amiibo/` dumps, and the In-Game Controller Overlay Guide.
+- **Standalone Mod Manager:** Open Digital Extras → Mod Manager to scan installed mods, enable or disable them with one checkbox, and open `GAME/mods/` to add more. Disabled folders use a `.disabled` suffix and are skipped by the game.
 - **Interactive High-Contrast Controls:** Custom-engineered `SonySlider` widgets with active gold progress fills, glowing thumb indicators, and high-visibility digital readouts.
 - **Startup Flexibility:** Includes a `[✓] SHOW LAUNCHER` toggle (boot directly to `totk.exe` or hold `Shift` on launch to bring it back), plus an optional desktop shortcut pointing straight to the launcher.
 - **Direct GitHub Community Integration:** Built-in 1-click button connecting players straight to our repository for updates and community discussions.
