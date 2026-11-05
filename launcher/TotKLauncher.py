@@ -13,6 +13,7 @@ import runpy
 import urllib.request
 import urllib.error
 import ctypes
+import shutil
 from ctypes import wintypes
 from pathlib import Path
 import tkinter as tk
@@ -68,6 +69,15 @@ class _MONITORINFOEX(ctypes.Structure):
 def enumerate_displays():
     """Return connected active Win32 monitors in EnumDisplayMonitors order."""
     displays = []
+    if os.name != "nt":
+        resolution = os.environ.get("TOTK_DISPLAY_RESOLUTION", "1280x800")
+        try:
+            width, height = (int(part) for part in resolution.lower().split("x", 1))
+        except (TypeError, ValueError):
+            width, height = 1280, 800
+        return [{"index": 1, "device": "PRIMARY", "width": width, "height": height,
+                 "resolution": f"{width}x{height}", "refresh": 60, "left": 0, "top": 0,
+                 "monitor_width": width, "monitor_height": height, "primary": True}]
     try:
         user32 = ctypes.windll.user32
         callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC,
@@ -116,10 +126,28 @@ def display_label(display):
     suffix = " (Primary)" if display["primary"] else ""
     return f"Display {display['index']}: {display['resolution']}{suffix}"
 
+def open_folder(path):
+    """Open a folder with the host desktop's file manager."""
+    path = str(path)
+    try:
+        if os.name == "nt":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            opener = shutil.which("xdg-open") or shutil.which("gio")
+            if opener:
+                subprocess.Popen([opener, "open", path] if Path(opener).name == "gio" else [opener, path])
+    except (OSError, subprocess.SubprocessError):
+        pass
+
 def place_window_on_monitor(window, monitor):
     """Center a Tk window in a monitor's work area using Win32 screen coordinates."""
     window.update_idletasks()
     width, height = window.winfo_width(), window.winfo_height()
+    if os.name != "nt":
+        window.geometry(f"{width}x{height}+0+0")
+        return
     left = monitor["left"] + max(0, (monitor["monitor_width"] - width) // 2)
     top = monitor["top"] + max(0, (monitor["monitor_height"] - height) // 2)
     try:
@@ -149,6 +177,8 @@ def play_ui_sound(kind):
 
 def _detect_primary_display_mode():
     """Read the current primary display mode from Win32, with safe fallbacks."""
+    if os.name != "nt":
+        return os.environ.get("TOTK_DISPLAY_RESOLUTION", "1280x800"), 60
     try:
         mode = _DEVMODE()
         mode.dmSize = ctypes.sizeof(mode)
@@ -166,6 +196,8 @@ def detect_primary_display():
 
 def detect_gpu():
     """Return the first Windows video controller's name and vendor."""
+    if os.name != "nt":
+        return "GPU detection unavailable on this platform", "Other"
     try:
         command = "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"
         result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
@@ -200,6 +232,10 @@ def find_game_dir():
         Path(__file__).resolve().parent.parent / "GAME",
         Path(r"C:\Games\Tears of the Kingdom PC\GAME"),
     ]
+    if getattr(sys, "frozen", False):
+        candidates.insert(0, Path(sys.executable).resolve().parent)
+    else:
+        candidates.insert(0, Path(__file__).resolve().parent)
     for c in candidates:
         if (c / "totk.exe").is_file() or (c / "totk.ini").is_file():
             return c
@@ -595,6 +631,19 @@ class SonySettingsDialog(tk.Toplevel):
 
     def build_display_tab(self):
         f = self.tab_display
+        preset_box = tk.LabelFrame(f, text=" Presets ", font=("Segoe UI", 9, "bold"),
+                                   fg=COLOR_GOLD, bg=COLOR_BG_DARK, bd=1,
+                                   highlightthickness=1, highlightbackground=COLOR_CARD_BORDER,
+                                   padx=12, pady=8, labelanchor="nw")
+        preset_box.pack(fill=tk.X, padx=20, pady=(10, 4))
+        self.handheld_preset_status = tk.Label(
+            preset_box, text="Balanced handheld settings for Steam Deck and similar devices.",
+            font=("Segoe UI", 8), fg=COLOR_TEXT_DIM, bg=COLOR_BG_DARK, anchor="w")
+        self.handheld_preset_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(preset_box, text="STEAM DECK / HANDHELD PRESET", command=self.apply_handheld_preset,
+                  font=("Segoe UI", 8, "bold"), fg="#000000", bg=COLOR_GOLD,
+                  activebackground=COLOR_GOLD_HOVER, bd=0, padx=12, pady=7,
+                  cursor="hand2").pack(side=tk.RIGHT, padx=(10, 0))
         monitor_row = tk.Frame(f, bg=COLOR_BG_DARK, pady=8)
         monitor_row.pack(fill=tk.X, padx=20)
         tk.Label(monitor_row, text="Target Display Monitor", font=("Segoe UI", 10, "bold"),
@@ -616,6 +665,8 @@ class SonySettingsDialog(tk.Toplevel):
         self.resolution_combo.bind("<<ComboboxSelected>>", self.on_resolution_changed)
         frame_rates = sorted(set(["30", "60", "90", "120", "144", str(self.display_refresh), "display"]),
                              key=lambda value: (value == "display", int(value) if value != "display" else 999))
+        if "40" not in frame_rates:
+            frame_rates.append("40")
         self.create_row_dropdown(f, "Frame Rate Limit", "fps_limit",
                                  frame_rates, self.get_val("fps_limit", str(self.display_refresh)),
                                  "Max frame rate cap. 'display' automatically synchronizes with monitor Hz.")
@@ -638,6 +689,39 @@ class SonySettingsDialog(tk.Toplevel):
                                           bd=0, padx=12, pady=8, cursor="hand2")
         self.ultrawide_button.pack(side=tk.RIGHT, padx=(12, 0))
         self.update_ultrawide_card()
+
+    def apply_handheld_preset(self):
+        """Apply Steam Deck-friendly settings to the pending dialog values."""
+        preset = {
+            "window_size": "1280x800",
+            "fps_limit": "40",
+            "upscaler": "fsr",
+            "upscaler_preset": "balanced",
+            "shadow_res": "768",
+            "shadow_range": "100",
+        }
+        for key, value in preset.items():
+            variable = self.vars.get(key)
+            if variable is None:
+                continue
+            combo = self.resolution_combo if key == "window_size" else self.fps_combo if key == "fps_limit" else None
+            if combo is not None:
+                values = list(combo.cget("values"))
+                if value not in values:
+                    values.append(value)
+                    combo.configure(values=values)
+            variable.set(value)
+        self.update_ultrawide_card()
+        self.handheld_preset_status.config(
+            text="Handheld preset selected. Choose SAVE & APPLY to write it to totk.ini.",
+            fg=COLOR_ACCENT_GREEN)
+
+    @staticmethod
+    def apply_handheld_preset_values(values):
+        """Pure helper for applying the handheld preset to a settings mapping."""
+        values.update({"window_size": "1280x800", "fps_limit": "40", "upscaler": "fsr",
+                       "upscaler_preset": "balanced", "shadow_res": "768", "shadow_range": "100"})
+        return values
 
     @staticmethod
     def ultrawide_kind(resolution):
@@ -940,7 +1024,7 @@ class ModsManagerDialog(tk.Toplevel):
     def open_mods_folder(self):
         try:
             MODS_DIR.mkdir(parents=True, exist_ok=True)
-            os.startfile(str(MODS_DIR))
+            open_folder(MODS_DIR)
         except Exception as exc:
             messagebox.showerror("Cannot Open Mods Folder", str(exc), parent=self)
 
@@ -1102,13 +1186,31 @@ class SonyLauncherApp(tk.Tk):
         self.canvas.create_window(70, 570, window=gh_btn, anchor="w")
 
     def launch_game(self):
-        exe_path = GAME_DIR / "totk.exe"
+        if os.name == "nt":
+            exe_path = GAME_DIR / "totk.exe"
+            command = [str(exe_path)]
+        else:
+            native_path = GAME_DIR / "totk"
+            exe_path = native_path if native_path.is_file() else GAME_DIR / "totk.exe"
+            if exe_path.suffix.lower() == ".exe":
+                wine = os.environ.get("TOTK_WINE") or shutil.which("wine") or shutil.which("wine64")
+                if not wine and os.environ.get("STEAM_COMPAT_DATA_PATH"):
+                    messagebox.showerror("Launch Error", "Steam Proton is active, but this launcher cannot discover "
+                                         "the Proton runtime from outside the game's Steam launch context. Launch "
+                                         "the game through Steam or set TOTK_WINE to a Wine/Proton executable.")
+                    return
+                if not wine:
+                    messagebox.showerror("Launch Error", "No native totk binary or Wine/Proton executable was found.")
+                    return
+                command = [wine, str(exe_path)]
+            else:
+                command = [str(exe_path)]
         if not exe_path.is_file():
-            messagebox.showerror("Error", f"totk.exe not found at:\n{exe_path}")
+            messagebox.showerror("Error", f"Game executable not found at:\n{exe_path}")
             return
 
         try:
-            subprocess.Popen([str(exe_path)], cwd=str(GAME_DIR))
+            subprocess.Popen(command, cwd=str(GAME_DIR))
             self.safe_quit()
         except Exception as e:
             messagebox.showerror("Launch Error", f"Failed to start totk.exe:\n{e}")
@@ -1169,7 +1271,7 @@ class SonyLauncherApp(tk.Tk):
         def open_dir(d, title):
             p = GAME_DIR / d
             p.mkdir(parents=True, exist_ok=True)
-            os.startfile(str(p))
+            open_folder(p)
 
         menu.add_command(label="🌐  Visit GitHub Repository", command=lambda: webbrowser.open(GITHUB_URL))
         menu.add_command(label="⬆  Check for Updates", command=self.check_for_updates)
@@ -1189,7 +1291,10 @@ class SonyLauncherApp(tk.Tk):
     def open_controller_guide(self):
         guide_p = GAME_DIR / "CONTROLLER_GUIDE.txt"
         if guide_p.is_file():
-            os.startfile(str(guide_p))
+            if os.name == "nt":
+                os.startfile(str(guide_p))
+            else:
+                open_folder(guide_p.parent)
         else:
             messagebox.showinfo("Guide", "CONTROLLER_GUIDE.txt not found in game directory.")
 
@@ -1211,14 +1316,25 @@ def main():
     shift_pressed = False
     try:
         import ctypes
-        shift_pressed = (ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000) != 0
+        shift_pressed = False
+        if os.name == "nt":
+            try:
+                shift_pressed = (ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000) != 0
+            except Exception:
+                pass
     except Exception:
         pass
 
     if not cfg.get("show_launcher", True) and not shift_pressed and "--launcher" not in sys.argv:
         exe_path = GAME_DIR / "totk.exe"
         if exe_path.is_file():
-            subprocess.Popen([str(exe_path)], cwd=str(GAME_DIR))
+            if os.name != "nt" and exe_path.suffix.lower() == ".exe":
+                wine = os.environ.get("TOTK_WINE") or shutil.which("wine") or shutil.which("wine64")
+                if not wine:
+                    return
+                subprocess.Popen([wine, str(exe_path)], cwd=str(GAME_DIR))
+            else:
+                subprocess.Popen([str(exe_path)], cwd=str(GAME_DIR))
             os._exit(0)
 
     app = SonyLauncherApp()

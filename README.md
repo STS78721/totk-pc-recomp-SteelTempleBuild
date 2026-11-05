@@ -44,6 +44,7 @@ Our goal is not just to run the game on PC—it is to **elevate *Tears of the Ki
 - **Direct GitHub Community Integration:** Built-in 1-click button connecting players straight to our repository for updates and community discussions.
 - **Controller Battery Overlay:** The compact performance HUD shows the active controller's reported battery level or charging state when available.
 - **Ultrawide HUD Patcher:** The launcher offers an asynchronous 21:9/32:9 layout patch generated from the installed RomFS.
+- **Steam Deck / Handheld Preset:** Apply 1280x800, a 40 FPS cap, FSR balanced upscaling, and reduced shadow settings from Display settings; Proton/Wine launches use native platform fallbacks when available.
 
 ---
 
