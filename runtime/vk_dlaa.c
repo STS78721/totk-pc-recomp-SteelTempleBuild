@@ -1271,3 +1271,7 @@ int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) {
     return !fxaa;
 }
 
+uint64_t vk_dlss_nr_dispatches(void) {
+    return D.evals;
+}
+

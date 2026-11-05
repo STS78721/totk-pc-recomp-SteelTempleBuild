@@ -418,6 +418,38 @@ void res_wanted(unsigned out[2]) {
     out[0] = R.ow, out[1] = R.oh;
 }
 
+void res_wanted_scene(unsigned scene[2]) {
+    decide();
+    unsigned ow = R.ow, oh = R.oh, w = 0, h = 0;
+    char tail;
+    if (sscanf(cfg_value("TOTK_OUTPUT_RES"), "%ux%u%c", &w, &h, &tail) == 2 && w >= 1280 && h >= 720 && w <= 7680 && h <= 4320)
+        ow = w & ~1u, oh = h & ~1u;
+    double k = 5.0 / 6.0;
+    const char *m = cfg_value("TOTK_DLSS");
+    static const struct { const char *name; double k; } dlss[] = {
+        {"dlaa", 1.0}, {"quality", 2.0 / 3.0}, {"balanced", 0.58}, {"performance", 0.5}, {"ultra_performance", 1.0 / 3.0}};
+    int dlss_on = cfg_bool("TOTK_DLAA") || !strcmp(cfg_value("TOTK_UPSCALER"), "dlss");
+    double dk = 0;
+    for (int i = 0; dlss_on && i < 5; i++)
+        if (!strcmp(m, dlss[i].name)) dk = dlss[i].k;
+    if (dk && dlss_dll()) {
+        k = dk;
+    } else {
+        const char *s = cfg_value("TOTK_RENDER_SCALE");
+        if (!strcmp(s, "67")) k = 2.0 / 3.0;
+        else if (!strcmp(s, "33")) k = 1.0 / 3.0;
+        else if (strcmp(s, "game")) {
+            char *end;
+            double pct = strtod(s, &end);
+            if (end != s && !*end && pct >= 25 && pct <= 400) k = pct / 100.0;
+        }
+    }
+    double sw = ow * k, sh = oh * k;
+    double fit = fmin(1.0, fmin(SCENE_MAX / sw, SCENE_MAX / sh));
+    scene[0] = (unsigned)(sw * fit + 0.5);
+    scene[1] = (unsigned)(sh * fit + 0.5);
+}
+
 // A TOTK_DLSS change while the game runs (vk_dlaa.c, at a present): the new scene size goes to the patch page, where
 // the game reads it when it sets its render size (main+0x585e48). 1.4.3 does that once, at start: its renderer setup
 // (main+0x7000e67028) calls main+0x585bd0(renderer, force), which picks the console mode's sizes and flags the render
