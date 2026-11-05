@@ -94,7 +94,7 @@ Every idea is welcome, whether you're a casual player enjoying Hyrule on your co
 
 ## 📥 Quick Start & Downloads
 
-Grab the latest prebuilt packages from our **[Latest Release (Beta 5e)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-5e)**:
+Grab the latest prebuilt packages from our **[Latest Release (Beta 5e Hotfix)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-5e)**:
 
 ### ⚡ 1. Upgrading / Moving from Another Recomp (Zero Recompiling Needed)
 If you already have a working game folder or are switching from upstream recomp:
