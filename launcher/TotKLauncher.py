@@ -8,6 +8,11 @@ import json
 import re
 import subprocess
 import webbrowser
+import threading
+import urllib.request
+import urllib.error
+import ctypes
+from ctypes import wintypes
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -29,6 +34,58 @@ COLOR_TRACK_ACTIVE = "#ffd24d"
 
 GITHUB_URL = "https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild"
 VERSION_STRING = "Beta 5e Hotfix"
+RELEASES_API_URL = "https://api.github.com/repos/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest"
+
+class _DEVMODE(ctypes.Structure):
+    _fields_ = [("dmDeviceName", wintypes.WCHAR * 32), ("dmSpecVersion", wintypes.WORD),
+                ("dmDriverVersion", wintypes.WORD), ("dmSize", wintypes.WORD),
+                ("dmDriverExtra", wintypes.WORD), ("dmFields", wintypes.DWORD),
+                ("dmOrientation", ctypes.c_short), ("dmPaperSize", ctypes.c_short),
+                ("dmPaperLength", ctypes.c_short), ("dmPaperWidth", ctypes.c_short),
+                ("dmScale", ctypes.c_short), ("dmCopies", ctypes.c_short),
+                ("dmDefaultSource", ctypes.c_short), ("dmPrintQuality", ctypes.c_short),
+                ("dmColor", ctypes.c_short), ("dmDuplex", ctypes.c_short),
+                ("dmYResolution", ctypes.c_short), ("dmTTOption", ctypes.c_short),
+                ("dmCollate", ctypes.c_short), ("dmFormName", wintypes.WCHAR * 32),
+                ("dmLogPixels", wintypes.WORD), ("dmBitsPerPel", wintypes.DWORD),
+                ("dmPelsWidth", wintypes.DWORD), ("dmPelsHeight", wintypes.DWORD),
+                ("dmDisplayFlags", wintypes.DWORD), ("dmDisplayFrequency", wintypes.DWORD),
+                ("dmICMMethod", wintypes.DWORD), ("dmICMIntent", wintypes.DWORD),
+                ("dmMediaType", wintypes.DWORD), ("dmDitherType", wintypes.DWORD),
+                ("dmReserved1", wintypes.DWORD), ("dmReserved2", wintypes.DWORD),
+                ("dmPanningWidth", wintypes.DWORD), ("dmPanningHeight", wintypes.DWORD)]
+
+def detect_primary_display():
+    """Read the current primary display mode from Win32, with safe fallbacks."""
+    try:
+        mode = _DEVMODE()
+        mode.dmSize = ctypes.sizeof(mode)
+        if ctypes.windll.user32.EnumDisplaySettingsW(None, -1, ctypes.byref(mode)):
+            if mode.dmPelsWidth and mode.dmPelsHeight:
+                return f"{mode.dmPelsWidth}x{mode.dmPelsHeight}", int(mode.dmDisplayFrequency or 60)
+    except Exception:
+        pass
+    return "1920x1080", 60
+
+def detect_gpu():
+    """Return the first Windows video controller's name and vendor."""
+    try:
+        command = "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"
+        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                                capture_output=True, text=True, timeout=8, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        names = json.loads(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else []
+        if isinstance(names, str):
+            names = [names]
+        if names:
+            # Prefer the discrete vendor when a system has both an integrated and discrete adapter.
+            names.sort(key=lambda name: (not any(v in name.lower() for v in ("nvidia", "geforce", "amd", "radeon")), name))
+            name = names[0]
+            low = name.lower()
+            vendor = "NVIDIA" if any(v in low for v in ("nvidia", "geforce")) else "AMD" if any(v in low for v in ("amd", "radeon")) else "Intel" if "intel" in low else "Other"
+            return name, vendor
+    except Exception:
+        pass
+    return "GPU not detected", "Other"
 
 def get_base_dir():
     """Return the base directory for assets (works for source and PyInstaller bundle)."""
@@ -234,11 +291,36 @@ class SonySettingsDialog(tk.Toplevel):
 
         self.ini_values = parse_ini(INI_PATH)
         self.vars = {}
+        self.display_resolution, self.display_refresh = detect_primary_display()
+        self.gpu_name, self.gpu_vendor = "Detecting GPU…", "Other"
 
         self.setup_ui()
 
     def get_val(self, key, default=""):
         return self.ini_values.get(key.lower(), default)
+
+    def _detect_gpu_async(self):
+        name, vendor = detect_gpu()
+        self.after(0, lambda: self._show_gpu(name, vendor))
+
+    def _show_gpu(self, name, vendor):
+        self.gpu_name, self.gpu_vendor = name, vendor
+        self.gpu_header.config(text=f"Detected: {name}", fg=COLOR_ACCENT_GREEN if vendor != "Other" else COLOR_TEXT_DIM)
+        self._update_upscaler_advice()
+
+    def _update_upscaler_advice(self, *_args):
+        if not hasattr(self, "upscaler_note") or "upscaler" not in self.vars:
+            return
+        selected = self.vars["upscaler"].get()
+        if selected == "dlss" and self.gpu_vendor != "NVIDIA":
+            text, color = "DLSS requires an NVIDIA GPU. Consider AMD FSR or Intel XeSS.", COLOR_GOLD
+        elif self.gpu_vendor == "AMD" and selected == "xess":
+            text, color = "XeSS is available; AMD FSR is also a good match for this GPU.", COLOR_TEXT_DIM
+        elif self.gpu_vendor == "Intel" and selected in ("fsr", "fsr4"):
+            text, color = "Intel XeSS is also available and may suit this GPU well.", COLOR_TEXT_DIM
+        else:
+            text, color = "", COLOR_TEXT_DIM
+        self.upscaler_note.config(text=text, fg=color)
 
     def setup_ui(self):
         # Header banner
@@ -249,6 +331,8 @@ class SonySettingsDialog(tk.Toplevel):
         title_lbl = tk.Label(header, text="GAME SETTINGS & GRAPHICS CONFIGURATION",
                              font=("Segoe UI", 12, "bold"), fg=COLOR_GOLD, bg=COLOR_CARD)
         title_lbl.pack(side=tk.LEFT, padx=25, pady=18)
+        self.gpu_header = tk.Label(header, text="Detected: Detecting GPU…", font=("Segoe UI", 9), fg=COLOR_TEXT_DIM, bg=COLOR_CARD)
+        self.gpu_header.pack(side=tk.RIGHT, padx=20)
 
         # Style notebook
         style = ttk.Style(self)
@@ -277,6 +361,7 @@ class SonySettingsDialog(tk.Toplevel):
         self.build_upscale_tab()
         self.build_graphics_tab()
         self.build_audio_tab()
+        threading.Thread(target=self._detect_gpu_async, daemon=True).start()
 
         # Bottom Bar
         bottom_bar = tk.Frame(self, bg=COLOR_CARD, height=64)
@@ -386,11 +471,15 @@ class SonySettingsDialog(tk.Toplevel):
     def build_display_tab(self):
         f = self.tab_display
         self.create_row_toggle(f, "Exclusive Fullscreen", "fullscreen", "1", "Start directly in true fullscreen window.")
+        resolutions = ["3840x2160", "2560x1440", "1920x1080", "1280x720", "3440x1440", "5120x1440"]
+        if self.display_resolution not in resolutions:
+            resolutions.insert(0, self.display_resolution)
         self.create_row_dropdown(f, "Window Resolution", "window_size",
-                                 ["3840x2160", "2560x1440", "1920x1080", "1280x720", "3440x1440", "5120x1440"],
-                                 "1920x1080", "Target display resolution for rendering & window bounds.")
+                                 resolutions, self.display_resolution, "Target display resolution for rendering & window bounds.")
+        frame_rates = sorted(set(["30", "60", "90", "120", "144", str(self.display_refresh), "display"]),
+                             key=lambda value: (value == "display", int(value) if value != "display" else 999))
         self.create_row_dropdown(f, "Frame Rate Limit", "fps_limit",
-                                 ["30", "60", "90", "120", "144", "display"], "120",
+                                 frame_rates, str(self.display_refresh),
                                  "Max frame rate cap. 'display' automatically synchronizes with monitor Hz.")
         self.create_row_dropdown(f, "V-Sync / Presentation Mode", "vk_present",
                                  ["mailbox", "fifo", "immediate"], "mailbox",
@@ -406,6 +495,10 @@ class SonySettingsDialog(tk.Toplevel):
         self.create_row_dropdown(f, "Upscaler Technology", "upscaler",
                                  ["dlss", "fsr4", "fsr", "xess", "bilinear", "off"], "dlss",
                                  "Deep Learning Super Sampling, FSR 4.1.2/1.0, Intel XeSS, or native rasterization.")
+        self.upscaler_note = tk.Label(f, text="", font=("Segoe UI", 8), fg=COLOR_GOLD, bg=COLOR_BG_DARK, anchor="w")
+        self.upscaler_note.pack(fill=tk.X, padx=22, pady=(0, 4))
+        self.vars["upscaler"].trace_add("write", self._update_upscaler_advice)
+        self._update_upscaler_advice()
         self.create_row_dropdown(f, "DLSS Quality Preset", "upscaler_preset",
                                  ["dlaa", "quality", "balanced", "performance", "ultra_performance"], "quality",
                                  "DLAA renders native 100% scene. Quality (67%), Balanced (58%), Performance (50%).")
@@ -620,6 +713,15 @@ class SonyLauncherApp(tk.Tk):
                            font=("Segoe UI", 9, "bold"), fg=COLOR_GOLD, bg=COLOR_CARD)
         ver_lbl.pack(anchor="e", pady=(4, 0))
 
+        self.update_status = tk.Label(footer_card, text="", font=("Segoe UI", 8), fg=COLOR_ACCENT_GREEN,
+                                      bg=COLOR_CARD, wraplength=230, justify="right")
+        self.update_status.pack(anchor="e", pady=(4, 0))
+        update_btn = tk.Button(footer_card, text="CHECK FOR UPDATES", font=("Segoe UI", 8, "bold"),
+                               fg=COLOR_WHITE, bg=COLOR_BUTTON_HOVER, activebackground=COLOR_GOLD,
+                               activeforeground="#000000", bd=0, padx=10, pady=5, cursor="hand2",
+                               command=self.check_for_updates)
+        update_btn.pack(anchor="e", pady=(6, 0))
+
         self.canvas.create_window(1050, 565, window=footer_card, anchor="se")
 
         # GitHub Link Button on Canvas (Bottom-Left)
@@ -642,6 +744,51 @@ class SonyLauncherApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Launch Error", f"Failed to start totk.exe:\n{e}")
 
+    def check_for_updates(self):
+        self.update_status.config(text="Checking GitHub Releases…", fg=COLOR_TEXT_DIM)
+        threading.Thread(target=self._check_releases_worker, daemon=True).start()
+
+    def _check_releases_worker(self):
+        try:
+            request = urllib.request.Request(RELEASES_API_URL, headers={"Accept": "application/vnd.github+json",
+                                                                        "User-Agent": "TotKLauncher"})
+            with urllib.request.urlopen(request, timeout=12) as response:
+                release = json.loads(response.read().decode("utf-8"))
+            tag = release.get("tag_name", "").strip()
+            title = release.get("name", "").strip() or tag
+            page = release.get("html_url", GITHUB_URL + "/releases/latest")
+            if not tag:
+                raise ValueError("The latest release did not include a version tag.")
+            self.after(0, lambda: self._show_release_result(tag, title, page))
+        except Exception as exc:
+            detail = str(exc)
+            self.after(0, lambda: self.update_status.config(text=f"Update check failed: {detail}", fg="#ff7373"))
+
+    def _show_release_result(self, tag, title, page):
+        release_version = title.split(":", 1)[0].strip()
+        if (tag.casefold() == VERSION_STRING.casefold() or title.casefold() == VERSION_STRING.casefold()
+                or release_version.casefold() == VERSION_STRING.casefold()):
+            self.update_status.config(text=f"You are on the latest build ({VERSION_STRING})!", fg=COLOR_ACCENT_GREEN)
+            return
+        self.update_status.config(text=f"Update available: {title}", fg=COLOR_GOLD)
+        dialog = tk.Toplevel(self)
+        dialog.title("Update Available")
+        dialog.configure(bg=COLOR_BG_DARK)
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        tk.Label(dialog, text=f"A newer build is available:\n{title}", font=("Segoe UI", 11, "bold"),
+                 fg=COLOR_WHITE, bg=COLOR_BG_DARK, padx=28, pady=22).pack()
+        actions = tk.Frame(dialog, bg=COLOR_BG_DARK)
+        actions.pack(pady=(0, 20))
+        tk.Button(actions, text="Download on GitHub", command=lambda: (webbrowser.open(page), dialog.destroy()),
+                  font=("Segoe UI", 9, "bold"), fg="#000000", bg=COLOR_GOLD, bd=0, padx=14, pady=8,
+                  cursor="hand2").pack(side=tk.LEFT, padx=6)
+        tk.Button(actions, text="Later", command=dialog.destroy, font=("Segoe UI", 9), fg=COLOR_WHITE,
+                  bg=COLOR_BUTTON_HOVER, bd=0, padx=14, pady=8, cursor="hand2").pack(side=tk.LEFT, padx=6)
+        dialog.update_idletasks()
+        dialog.geometry(f"+{self.winfo_rootx() + (self.winfo_width() - dialog.winfo_width()) // 2}+"
+                        f"{self.winfo_rooty() + (self.winfo_height() - dialog.winfo_height()) // 2}")
+
     def open_settings(self):
         SonySettingsDialog(self)
 
@@ -656,6 +803,7 @@ class SonyLauncherApp(tk.Tk):
             os.startfile(str(p))
 
         menu.add_command(label="🌐  Visit GitHub Repository", command=lambda: webbrowser.open(GITHUB_URL))
+        menu.add_command(label="⬆  Check for Updates", command=self.check_for_updates)
         menu.add_separator()
         menu.add_command(label="📁  Open Mods Folder (mods/)", command=lambda: open_dir("mods", "Mods"))
         menu.add_command(label="💾  Open Save Directory (profile/save/)", command=lambda: open_dir("profile/save", "Saves"))
