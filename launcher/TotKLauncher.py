@@ -55,7 +55,97 @@ class _DEVMODE(ctypes.Structure):
                 ("dmReserved1", wintypes.DWORD), ("dmReserved2", wintypes.DWORD),
                 ("dmPanningWidth", wintypes.DWORD), ("dmPanningHeight", wintypes.DWORD)]
 
-def detect_primary_display():
+class _RECT(ctypes.Structure):
+    _fields_ = [("left", wintypes.LONG), ("top", wintypes.LONG),
+                ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
+
+class _MONITORINFOEX(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", _RECT), ("rcWork", _RECT),
+                ("dwFlags", wintypes.DWORD), ("szDevice", wintypes.WCHAR * 32)]
+
+def enumerate_displays():
+    """Return connected active Win32 monitors in EnumDisplayMonitors order."""
+    displays = []
+    try:
+        user32 = ctypes.windll.user32
+        callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC,
+                                           ctypes.POINTER(_RECT), wintypes.LPARAM)
+        user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(_MONITORINFOEX)]
+        user32.GetMonitorInfoW.restype = wintypes.BOOL
+        user32.EnumDisplaySettingsW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(_DEVMODE)]
+        user32.EnumDisplaySettingsW.restype = wintypes.BOOL
+        user32.EnumDisplayMonitors.argtypes = [wintypes.HDC, ctypes.POINTER(_RECT), callback_type, wintypes.LPARAM]
+        user32.EnumDisplayMonitors.restype = wintypes.BOOL
+
+        def visit(handle, _dc, _rect, _data):
+            info = _MONITORINFOEX()
+            info.cbSize = ctypes.sizeof(info)
+            if not user32.GetMonitorInfoW(handle, ctypes.byref(info)):
+                return True
+            mode = _DEVMODE()
+            mode.dmSize = ctypes.sizeof(mode)
+            user32.EnumDisplaySettingsW(info.szDevice, -1, ctypes.byref(mode))
+            width = mode.dmPelsWidth or (info.rcMonitor.right - info.rcMonitor.left)
+            height = mode.dmPelsHeight or (info.rcMonitor.bottom - info.rcMonitor.top)
+            index = len(displays) + 1
+            primary = bool(info.dwFlags & 1)
+            displays.append({
+                "index": index, "device": info.szDevice, "width": int(width), "height": int(height),
+                "resolution": f"{width}x{height}", "refresh": int(mode.dmDisplayFrequency or 60),
+                "left": int(info.rcMonitor.left), "top": int(info.rcMonitor.top),
+                "monitor_width": int(info.rcMonitor.right - info.rcMonitor.left),
+                "monitor_height": int(info.rcMonitor.bottom - info.rcMonitor.top), "primary": primary,
+            })
+            return True
+
+        callback = callback_type(visit)
+        user32.EnumDisplayMonitors(None, None, callback, 0)
+    except Exception:
+        pass
+    if not displays:
+        resolution, refresh = _detect_primary_display_mode()
+        width, height = (int(part) for part in resolution.split("x", 1))
+        displays.append({"index": 1, "device": "PRIMARY", "width": width, "height": height,
+                         "resolution": resolution, "refresh": refresh, "left": 0, "top": 0,
+                         "monitor_width": width, "monitor_height": height, "primary": True})
+    return displays
+
+def display_label(display):
+    suffix = " (Primary)" if display["primary"] else ""
+    return f"Display {display['index']}: {display['resolution']}{suffix}"
+
+def place_window_on_monitor(window, monitor):
+    """Center a Tk window in a monitor's work area using Win32 screen coordinates."""
+    window.update_idletasks()
+    width, height = window.winfo_width(), window.winfo_height()
+    left = monitor["left"] + max(0, (monitor["monitor_width"] - width) // 2)
+    top = monitor["top"] + max(0, (monitor["monitor_height"] - height) // 2)
+    try:
+        user32 = ctypes.windll.user32
+        user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        user32.GetAncestor.restype = wintypes.HWND
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                                        ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        user32.SetWindowPos.restype = wintypes.BOOL
+        hwnd = user32.GetAncestor(window.winfo_id(), 2)  # GA_ROOT: Tk's outer window, including its title bar.
+        if not hwnd or not user32.SetWindowPos(hwnd, None, left, top, width, height, 0x0014):
+            window.geometry(f"{width}x{height}+{left}+{top}")
+    except Exception:
+        window.geometry(f"{width}x{height}+{left}+{top}")
+
+def play_ui_sound(kind):
+    """Play a bundled short UI chime asynchronously when sound is enabled."""
+    if not getattr(play_ui_sound, "enabled", True):
+        return
+    try:
+        import winsound
+        filename = "hover.wav" if kind == "hover" else "click.wav"
+        sound_path = get_base_dir() / "sounds" / filename
+        winsound.PlaySound(str(sound_path), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+    except Exception:
+        pass
+
+def _detect_primary_display_mode():
     """Read the current primary display mode from Win32, with safe fallbacks."""
     try:
         mode = _DEVMODE()
@@ -66,6 +156,11 @@ def detect_primary_display():
     except Exception:
         pass
     return "1920x1080", 60
+
+def detect_primary_display():
+    """Read the current primary display mode from Win32, with safe fallbacks."""
+    primary = next((display for display in enumerate_displays() if display["primary"]), None)
+    return (primary["resolution"], primary["refresh"]) if primary else _detect_primary_display_mode()
 
 def detect_gpu():
     """Return the first Windows video controller's name and vendor."""
@@ -281,20 +376,18 @@ class SonySettingsDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
-        # Center on screen
-        self.update_idletasks()
-        w = self.winfo_width()
-        h = self.winfo_height()
-        x = (self.winfo_screenwidth() // 2) - (w // 2)
-        y = (self.winfo_screenheight() // 2) - (h // 2)
-        self.geometry(f"{w}x{h}+{x}+{y}")
-
         self.ini_values = parse_ini(INI_PATH)
         self.vars = {}
-        self.display_resolution, self.display_refresh = detect_primary_display()
+        self.parent_app = parent
+        self.monitors = enumerate_displays()
+        saved_device = parent.launcher_cfg.get("target_display")
+        self.target_monitor = next((monitor for monitor in self.monitors if monitor["device"] == saved_device),
+                                   next((monitor for monitor in self.monitors if monitor["primary"]), self.monitors[0]))
+        self.display_resolution, self.display_refresh = self.target_monitor["resolution"], self.target_monitor["refresh"]
         self.gpu_name, self.gpu_vendor = "Detecting GPU…", "Other"
 
         self.setup_ui()
+        place_window_on_monitor(self, self.target_monitor)
 
     def get_val(self, key, default=""):
         return self.ini_values.get(key.lower(), default)
@@ -470,17 +563,46 @@ class SonySettingsDialog(tk.Toplevel):
 
     def build_display_tab(self):
         f = self.tab_display
+        monitor_row = tk.Frame(f, bg=COLOR_BG_DARK, pady=8)
+        monitor_row.pack(fill=tk.X, padx=20)
+        tk.Label(monitor_row, text="Target Display Monitor", font=("Segoe UI", 10, "bold"),
+                 fg=COLOR_WHITE, bg=COLOR_BG_DARK).pack(side=tk.LEFT, anchor="w")
+        self.monitor_labels = {display_label(monitor): monitor for monitor in self.monitors}
+        self.target_display_var = tk.StringVar(value=display_label(self.target_monitor))
+        self.monitor_combo = ttk.Combobox(monitor_row, textvariable=self.target_display_var,
+                                          values=list(self.monitor_labels), state="readonly", width=32,
+                                          font=("Segoe UI", 9))
+        self.monitor_combo.pack(side=tk.RIGHT, padx=5)
+        self.monitor_combo.bind("<<ComboboxSelected>>", self.on_monitor_changed)
         self.create_row_toggle(f, "Exclusive Fullscreen", "fullscreen", "1", "Start directly in true fullscreen window.")
         resolutions = ["3840x2160", "2560x1440", "1920x1080", "1280x720", "3440x1440", "5120x1440"]
         if self.display_resolution not in resolutions:
             resolutions.insert(0, self.display_resolution)
         self.create_row_dropdown(f, "Window Resolution", "window_size",
-                                 resolutions, self.display_resolution, "Target display resolution for rendering & window bounds.")
+                                 resolutions, self.get_val("window_size", self.display_resolution), "Target display resolution for rendering & window bounds.")
+        self.resolution_combo = f.winfo_children()[-1].winfo_children()[-1]
         frame_rates = sorted(set(["30", "60", "90", "120", "144", str(self.display_refresh), "display"]),
                              key=lambda value: (value == "display", int(value) if value != "display" else 999))
         self.create_row_dropdown(f, "Frame Rate Limit", "fps_limit",
-                                 frame_rates, str(self.display_refresh),
+                                 frame_rates, self.get_val("fps_limit", str(self.display_refresh)),
                                  "Max frame rate cap. 'display' automatically synchronizes with monitor Hz.")
+        self.fps_combo = f.winfo_children()[-1].winfo_children()[-1]
+
+    def on_monitor_changed(self, _event=None):
+        self.target_monitor = self.monitor_labels.get(self.target_display_var.get(), self.target_monitor)
+        self.display_resolution = self.target_monitor["resolution"]
+        self.display_refresh = self.target_monitor["refresh"]
+        resolution_values = list(self.resolution_combo.cget("values"))
+        if self.display_resolution not in resolution_values:
+            resolution_values.insert(0, self.display_resolution)
+        self.resolution_combo.configure(values=resolution_values)
+        self.vars["window_size"].set(self.display_resolution)
+        fps_values = list(self.fps_combo.cget("values"))
+        refresh = str(self.display_refresh)
+        if refresh not in fps_values:
+            fps_values.insert(-1, refresh)
+        self.fps_combo.configure(values=fps_values)
+        self.vars["fps_limit"].set(refresh)
         self.create_row_dropdown(f, "V-Sync / Presentation Mode", "vk_present",
                                  ["mailbox", "fifo", "immediate"], "mailbox",
                                  "Mailbox (Smooth low-latency VSync), FIFO (Strict VSync), Immediate (Tearing/Raw).")
@@ -547,12 +669,24 @@ class SonySettingsDialog(tk.Toplevel):
                                  "Auto detects controller, or force DualSense, Xbox, or Keyboard icons.")
         self.create_row_toggle(f, "Direct Mouse Camera Aiming", "mouse_mode", "1",
                                "Allows direct 1:1 raw mouse input for archery and camera rotation.")
+        sound_row = tk.Frame(f, bg=COLOR_BG_DARK, pady=8)
+        sound_row.pack(fill=tk.X, padx=20)
+        self.sound_effects_var = tk.BooleanVar(value=self.parent_app.launcher_cfg.get("launcher_sound_effects", True))
+        tk.Checkbutton(sound_row, text="Launcher Sound Effects", variable=self.sound_effects_var,
+                       font=("Segoe UI", 10, "bold"), fg=COLOR_WHITE, bg=COLOR_BG_DARK,
+                       activebackground=COLOR_BG_DARK, activeforeground=COLOR_GOLD,
+                       selectcolor=COLOR_CARD, bd=0, highlightthickness=0, cursor="hand2").pack(side=tk.LEFT)
 
     def save_and_close(self):
         updates = {}
         for k, var in self.vars.items():
             updates[k] = str(var.get())
         if save_ini_settings(INI_PATH, updates):
+            self.parent_app.launcher_cfg["target_display"] = self.target_monitor["device"]
+            self.parent_app.launcher_cfg["launcher_sound_effects"] = self.sound_effects_var.get()
+            save_launcher_config(self.parent_app.launcher_cfg)
+            play_ui_sound.enabled = self.sound_effects_var.get()
+            self.parent_app.move_to_monitor(self.target_monitor)
             messagebox.showinfo("Settings Saved", "Settings successfully saved to totk.ini!")
             self.destroy()
         else:
@@ -584,6 +718,7 @@ class SonySettingsDialog(tk.Toplevel):
             for k, val in defaults.items():
                 if k in self.vars:
                     self.vars[k].set(val)
+            self.sound_effects_var.set(True)
 
 
 # --- Sony-style Main Launcher Window ---
@@ -616,9 +751,17 @@ class SonyLauncherApp(tk.Tk):
         self.geometry(f"{w}x{h}+{x}+{y}")
 
         self.launcher_cfg = load_launcher_config()
+        play_ui_sound.enabled = bool(self.launcher_cfg.get("launcher_sound_effects", True))
 
         self.setup_background()
         self.setup_ui_overlay()
+        monitor = next((entry for entry in enumerate_displays()
+                        if entry["device"] == self.launcher_cfg.get("target_display")), None)
+        if monitor:
+            self.move_to_monitor(monitor)
+
+    def move_to_monitor(self, monitor):
+        place_window_on_monitor(self, monitor)
 
     def safe_quit(self):
         """Clean and instant exit preventing Tcl 9 alloc panics."""
@@ -678,6 +821,7 @@ class SonyLauncherApp(tk.Tk):
                                              fill=default_color, anchor="w", tags=f"btn_{i}")
 
             def on_enter(e, tid=txt_id, ip=is_play):
+                play_ui_sound("hover")
                 self.canvas.itemconfig(tid, fill=COLOR_GOLD_HOVER if ip else COLOR_GOLD)
                 self.config(cursor="hand2")
 
@@ -686,6 +830,7 @@ class SonyLauncherApp(tk.Tk):
                 self.config(cursor="")
 
             def on_click(e, fn=cmd):
+                play_ui_sound("click")
                 fn()
 
             self.canvas.tag_bind(txt_id, "<Enter>", on_enter)

@@ -5,7 +5,7 @@ a = Analysis(
     ['TotKLauncher.py'],
     pathex=[],
     binaries=[],
-    datas=[('background.jpg', '.'), ('totk.ico', '.')],
+    datas=[('background.jpg', '.'), ('totk.ico', '.'), ('sounds', 'sounds')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
