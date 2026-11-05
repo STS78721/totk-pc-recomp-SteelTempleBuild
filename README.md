@@ -27,11 +27,29 @@ Our goal is not just to run the game on PC—it is to **elevate *Tears of the Ki
 
 ## 🕹️ What Has Been Implemented
 
+### 1. 🖥️ Standalone PlayStation / Nixxes-Style PC Launcher (`TotKLauncher.exe`)
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/STS78721/totk-pc-recomp-SteelTempleBuild/main/launcher/launcher_showcase.png" alt="SteelTemple Standalone PC Launcher" width="90%">
+</p>
+
+*Modeled directly after modern AAA Sony/Nixxes PC ports (Horizon Forbidden West, Ghost of Tsushima, Spider-Man):*
+- **Pre-Game Configuration Hub:** Dial in your graphics, display resolution, and performance settings *before* launching the game.
+- **Troubleshoot & Prevent Crashes:** If an unsupported resolution or display mode ever causes an out-of-range monitor error or black screen, fix it externally without editing raw config files.
+- **Zero In-Game Stuttering:** Pre-configure DLSS 4.5, AMD FSR 4.1.2, Intel XeSS, Frame Generation, and NVIDIA Reflex Boost so your game boots perfectly dialed in with optimal Vulkan pipeline pre-building.
+- **Digital Extras One-Click Directory Hub:** Direct 1-click access to the `mods/` directory, save file location (`profile/save/`), `amiibo/` dumps, and the In-Game Controller Overlay Guide.
+- **Interactive High-Contrast Controls:** Custom-engineered `SonySlider` widgets with active gold progress fills, glowing thumb indicators, and high-visibility digital readouts.
+- **Startup Flexibility:** Includes a `[✓] SHOW LAUNCHER` toggle (boot directly to `totk.exe` or hold `Shift` on launch to bring it back), plus an optional desktop shortcut pointing straight to the launcher.
+- **Direct GitHub Community Integration:** Built-in 1-click button connecting players straight to our repository for updates and community discussions.
+
+---
+
+### 2. 🎮 Native PlayStation 5 DualSense Next-Gen Immersion
+
 <p align="center">
   <img src="https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/v0.3.4-beta-4-steeltemple/totk_zonai_dualsense_theme.png" alt="TotK SteelTemple Next-Gen Immersion" width="85%">
 </p>
 
-### 1. 🎮 Native PlayStation 5 DualSense Next-Gen Immersion
 *A whole new way to play TotK on PC with full physical and auditory tactile integration:*
 - **4-Channel Audio Streaming & Controller Speaker:** Tapped straight into the game's 48 kHz audio mixer. Sound effects are high-pass filtered and routed directly to the controller's built-in speaker.
 - **Smart Interactive Audio Gating:** The speaker stays silent during peaceful exploration—music and ambient wind remain purely on your TV/display. The controller speaker fires only during Link's actions (bow draws, arrow flight, shield parries, melee clashes, explosions, chest fanfares).
@@ -40,23 +58,23 @@ Our goal is not just to run the game on PC—it is to **elevate *Tears of the Ki
 - **Shield Parry Kickback:** When an enemy strikes Link's shield, the Left Trigger (ZL) violently hammers back with maximum force for 350 ms, physically pushing your finger off the trigger.
 - **Luminous Zonai Teal-Green Lightbar (`#20F8B8`):** Glows in Link's iconic Ultrahand magic color and gracefully restores to standard system lighting when exiting the game.
 
-### 2. 🚀 Comprehensive AI Upscaler & Neural Reconstruction Hub
+### 3. 🚀 Comprehensive AI Upscaler & Neural Reconstruction Hub
 - **Universal Multi-Vendor Upscaling:** NVIDIA DLSS 4 / 4.5 (Presets K, J, M, L, E, C), Intel XeSS 2.0+ (Hardware XMX & universal DP4a), AMD FSR 4.1.2 & FSR 1.0 (EASU + RCAS).
 - **DLSS Neural Reconstruction (DLSS-NR):** OptiScaler-style neural radiance reconstruction running on Preset B for temporal stability and fine detail. Fully uncoupled from super-resolution presets with hardware auto-gating.
 - **Accurate Dynamic Resolution:** Proper 66.7% internal scene scaling in DLSS Quality mode, strictly separated from native 100% DLAA anti-aliasing.
 - **Zero Foliage Haloing:** Eliminated unwanted forced sharpening passes on native frames, keeping grass and leaves pristine.
 
-### 3. ⚡ Multi-Vendor Frame Generation & Low Latency
+### 4. ⚡ Multi-Vendor Frame Generation & Low Latency
 - **Frame Multiplication:** Hardware-aware frame generation support across vendors (NVIDIA DLSS-G, Intel XeFG up to 4x, and AMD FSR 3.1 / FSR 4 AI FG).
 - **Minimal Input Lag:** Synchronized queue pacing with NVIDIA Reflex (`VK_NV_low_latency2`), AMD Anti-Lag 2 (`VK_AMD_anti_lag`), and Intel XeLL.
 
-### 4. 🎨 Ambient Occlusion, HDR & Visual Stability
+### 5. 🎨 Ambient Occlusion, HDR & Visual Stability
 - **Contact Shadowing:** In-engine ambient occlusion choices including Intel XeGTAO, 24-step Directional HBAO, SSAO, and native Switch AO.
 - **Cave & Dark Area Flicker Elimination:** Isolated half-resolution sub-passes so volumetric cave fog never hijacks or flickers the upscaler pipeline.
 - **OLED HDR10 Calibration:** Dedicated HDR profiles (Vivid, Clarity, Custom) with peak nits and HUD brightness balancing.
 - **Clean Grouped HUD:** Two-line high-contrast performance overlay with 0.1% and 1% low frametime hitch tracking and zero repetitive wording.
 
-### 5. 🛠️ Upstream v0.3.10 Engine Improvements & Fixes
+### 6. 🛠️ Upstream v0.3.10 Engine Improvements & Fixes
 - **Falling Rain & Waterfall Splashes Fix (#91, #528):** Implemented Vulkan storage buffer write-back merge to resolve white rain flicker and disappearing waterfall splash effects.
 - **VRAM Memory Leak Elimination (#670):** Properly releases pinned texture memory copies, reducing long-session memory leakage from 44 MiB/min to <1 MiB/min.
 - **Grass Fire Spread Fix (#132):** Fixed the fire propagation flag (*officially credited to STS78721 in upstream v0.3.10 release notes*).
@@ -98,16 +116,16 @@ Grab the latest prebuilt packages from our **[Latest Release (Beta 5e Hotfix)](h
 
 ### ⚡ 1. Upgrading / Moving from Another Recomp (Zero Recompiling Needed)
 If you already have a working game folder or are switching from upstream recomp:
-1. Download **[`totk-pc-recomp-Beta-5e-update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/totk-pc-recomp-Beta-5e-update.zip)** (85 MB).
-2. Extract and replace **`totk.exe`** and **`totk.ini`** directly into your existing game directory.
-3. Launch `totk.exe`! Your existing save games, settings, and RomFS will work seamlessly.
+1. Download **[`totk-pc-recomp-Beta-5e-update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/totk-pc-recomp-Beta-5e-update.zip)** (116 MB).
+2. Extract and replace **`totk.exe`**, **`TotKLauncher.exe`**, and **`totk.ini`** directly into your existing game directory.
+3. Launch **`TotKLauncher.exe`** to dial in your settings and hit Play, or start **`totk.exe`** directly! Your existing save games, settings, and RomFS will work seamlessly.
 
 ### 🎮 2. New Players (Fresh Standalone Setup)
-1. Download **[`TotK-Recomp-SteelTemple-Beta-5e.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/TotK-Recomp-SteelTemple-Beta-5e.zip)** (473 MB).
+1. Download **[`TotK-Recomp-SteelTemple-Beta-5e.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/TotK-Recomp-SteelTemple-Beta-5e.zip)** (505 MB).
 2. Extract the archive into your chosen game folder (e.g. `C:\Games\Tears of the Kingdom PC\GAME`).
-   - *This includes the precompiled `totk.exe`, `SDL3.dll`, all multi-vendor AI upscaler DLLs, controller configs, and aspect ratio patches.*
+   - *This includes the standalone `TotKLauncher.exe`, `totk.exe`, `SDL3.dll`, all multi-vendor AI upscaler DLLs, controller configs, and aspect ratio patches.*
 3. Copy your dumped **`romfs`** folder (from your legally owned 1.4.3 game dump) into this folder.
-4. Launch **`totk.exe`** to play!
+4. Launch **`TotKLauncher.exe`** to configure graphics and jump in!
 
 ### 🛠️ 3. Modern Setup & Configuration Utility (Optional)
 - Download **[`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe)** (or portable zip **`TotK-Setup-Modern-Beta-5e-windows.zip`**).
@@ -115,7 +133,7 @@ If you already have a working game folder or are switching from upstream recomp:
   - Configure multi-vendor AI upscalers (NVIDIA DLSS 4.5, DLSS-NR, Intel XeSS).
   - Install custom Controller UI prompt themes (PlayStation 5 DualSense, DualShock 4, Xbox).
   - Automatically detect and migrate your saves from Yuzu, Ryujinx, or previous recomp builds.
-  - Create a 1-click Desktop shortcut with high-resolution game icons.
+  - Create a 1-click Desktop shortcut pointing directly to the new Sony-style Launcher!
 
 ---
 
