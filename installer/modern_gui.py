@@ -375,7 +375,7 @@ class ModernTotkInstaller(ctk.CTk):
         card_short = ctk.CTkFrame(frame, fg_color=CARD_BG, corner_radius=10, border_width=1, border_color=CARD_BORDER)
         card_short.pack(fill="x", pady=6, padx=5)
 
-        chk_short = ctk.CTkCheckBox(card_short, text="Create Desktop Shortcut with high-res Tears of the Kingdom game icon",
+        chk_short = ctk.CTkCheckBox(card_short, text="Create Desktop Shortcut (Launches Sony-style Launcher with Settings & Play)",
                                     variable=self.var_create_shortcut, fg_color=ACCENT_GREEN, hover_color=ACCENT_HOVER)
         chk_short.pack(anchor="w", padx=15, pady=(8, 4))
 

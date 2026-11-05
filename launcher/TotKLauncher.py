@@ -17,13 +17,15 @@ from PIL import Image, ImageTk
 COLOR_BG_DARK = "#0a0c10"
 COLOR_GOLD = "#ffd24d"
 COLOR_GOLD_HOVER = "#fff2a3"
-COLOR_WHITE = "#e8eaed"
-COLOR_TEXT_DIM = "#8b949e"
-COLOR_CARD = "#13171f"
-COLOR_CARD_BORDER = "#252d3a"
+COLOR_WHITE = "#ffffff"
+COLOR_TEXT_DIM = "#9ba3af"
+COLOR_CARD = "#12161f"
+COLOR_CARD_BORDER = "#252e3d"
 COLOR_ACCENT_GREEN = "#1dd1a1"
-COLOR_TAB_ACTIVE = "#1f2633"
-COLOR_BUTTON_HOVER = "#2a3445"
+COLOR_TAB_ACTIVE = "#1f2736"
+COLOR_BUTTON_HOVER = "#2a3547"
+COLOR_TRACK_BG = "#263040"
+COLOR_TRACK_ACTIVE = "#ffd24d"
 
 GITHUB_URL = "https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild"
 VERSION_STRING = "Beta 5e Hotfix"
@@ -72,7 +74,6 @@ def save_launcher_config(cfg):
         print(f"Error saving launcher config: {e}")
 
 def parse_ini(ini_file):
-    """Parse totk.ini into key-value map."""
     values = {}
     if not ini_file.is_file():
         return values
@@ -90,11 +91,9 @@ def parse_ini(ini_file):
     return values
 
 def update_ini_setting(lines, key, new_val):
-    """Update or uncomment key = new_val in lines list."""
     pat_active = re.compile(rf'^\s*{re.escape(key)}\s*=.*$', re.IGNORECASE)
     pat_commented = re.compile(rf'^\s*[#;]\s*{re.escape(key)}\s*=.*$', re.IGNORECASE)
     
-    found = False
     for i, line in enumerate(lines):
         if pat_active.match(line):
             lines[i] = f"{key} = {new_val}\n"
@@ -106,9 +105,7 @@ def update_ini_setting(lines, key, new_val):
     return False
 
 def save_ini_settings(ini_file, updates):
-    """Update settings in totk.ini preserving comments and layout."""
     if not ini_file.is_file():
-        # Create fresh if missing
         with open(ini_file, "w", encoding="utf-8") as f:
             for k, v in updates.items():
                 f.write(f"{k} = {v}\n")
@@ -126,12 +123,102 @@ def save_ini_settings(ini_file, updates):
     return True
 
 
+# --- High-Contrast Custom Slider (Sony / Nixxes Style) ---
+class SonySlider(tk.Canvas):
+    """Modern, high-visibility interactive slider with active fill and glow thumb."""
+    def __init__(self, parent, from_, to_, initial, on_change=None, width=190, height=28, **kwargs):
+        super().__init__(parent, width=width, height=height, bg=COLOR_BG_DARK, highlightthickness=0, **kwargs)
+        self.from_ = from_
+        self.to_ = to_
+        self.val = int(initial)
+        self.on_change = on_change
+        self.w = width
+        self.h = height
+        self.pad = 12
+        self.track_w = self.w - (2 * self.pad)
+        self.y_mid = self.h // 2
+        self.is_hovered = False
+
+        self.bind("<Button-1>", self.on_click)
+        self.bind("<B1-Motion>", self.on_drag)
+        self.bind("<Enter>", self.on_enter)
+        self.bind("<Leave>", self.on_leave)
+        self.bind("<MouseWheel>", self.on_scroll)
+        self.draw()
+
+    def val_to_x(self, v):
+        span = self.to_ - self.from_
+        if span == 0:
+            return self.pad
+        frac = (v - self.from_) / float(span)
+        return self.pad + (frac * self.track_w)
+
+    def x_to_val(self, x):
+        clamped_x = max(self.pad, min(x, self.w - self.pad))
+        frac = (clamped_x - self.pad) / float(self.track_w)
+        v = self.from_ + (frac * (self.to_ - self.from_))
+        return int(round(v))
+
+    def set(self, v):
+        self.val = max(self.from_, min(self.to_, int(v)))
+        self.draw()
+        if self.on_change:
+            self.on_change(self.val)
+
+    def get(self):
+        return self.val
+
+    def on_click(self, e):
+        self.set(self.x_to_val(e.x))
+
+    def on_drag(self, e):
+        self.set(self.x_to_val(e.x))
+
+    def on_enter(self, e):
+        self.is_hovered = True
+        self.config(cursor="hand2")
+        self.draw()
+
+    def on_leave(self, e):
+        self.is_hovered = False
+        self.config(cursor="")
+        self.draw()
+
+    def on_scroll(self, e):
+        step = 5 if (self.to_ - self.from_) > 50 else 1
+        delta = step if e.delta > 0 else -step
+        self.set(self.val + delta)
+
+    def draw(self):
+        self.delete("all")
+        tx = self.val_to_x(self.val)
+        
+        # Inactive background track (clearly visible slate)
+        self.create_line(self.pad, self.y_mid, self.w - self.pad, self.y_mid,
+                         fill=COLOR_TRACK_BG, width=6, capstyle="round")
+        
+        # Active progress fill (bright gold)
+        if tx > self.pad:
+            self.create_line(self.pad, self.y_mid, tx, self.y_mid,
+                             fill=COLOR_TRACK_ACTIVE, width=6, capstyle="round")
+        
+        # Glowing thumb ring
+        r = 9 if not self.is_hovered else 10
+        outer_color = COLOR_GOLD_HOVER if self.is_hovered else COLOR_GOLD
+        self.create_oval(tx - r, self.y_mid - r, tx + r, self.y_mid + r,
+                         fill=outer_color, outline="#ffffff", width=1.5)
+        
+        # Thumb center core
+        self.create_oval(tx - 3, self.y_mid - 3, tx + 3, self.y_mid + 3,
+                         fill=COLOR_BG_DARK, outline="")
+
+
 # --- Sony / Nixxes Settings Dialog ---
 class SonySettingsDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Display & Graphics Settings")
-        self.geometry("820x640")
+        self.geometry("860x650")
         self.resizable(False, False)
         self.configure(bg=COLOR_BG_DARK)
         self.transient(parent)
@@ -192,7 +279,7 @@ class SonySettingsDialog(tk.Toplevel):
         self.build_audio_tab()
 
         # Bottom Bar
-        bottom_bar = tk.Frame(self, bg=COLOR_CARD, height=60)
+        bottom_bar = tk.Frame(self, bg=COLOR_CARD, height=64)
         bottom_bar.pack(fill=tk.X, side=tk.BOTTOM)
         bottom_bar.pack_propagate(False)
 
@@ -206,13 +293,13 @@ class SonySettingsDialog(tk.Toplevel):
             return b
 
         btn_save = make_btn(bottom_bar, "SAVE & APPLY", self.save_and_close, is_primary=True)
-        btn_save.pack(side=tk.RIGHT, padx=(10, 25), pady=12)
+        btn_save.pack(side=tk.RIGHT, padx=(10, 25), pady=14)
 
         btn_cancel = make_btn(bottom_bar, "CANCEL", self.destroy)
-        btn_cancel.pack(side=tk.RIGHT, padx=10, pady=12)
+        btn_cancel.pack(side=tk.RIGHT, padx=10, pady=14)
 
         btn_default = make_btn(bottom_bar, "RESTORE DEFAULTS", self.restore_defaults)
-        btn_default.pack(side=tk.LEFT, padx=25, pady=12)
+        btn_default.pack(side=tk.LEFT, padx=25, pady=14)
 
     def create_row_dropdown(self, parent, label_text, var_key, options, default_val, desc=""):
         frame = tk.Frame(parent, bg=COLOR_BG_DARK, pady=8)
@@ -265,6 +352,12 @@ class SonySettingsDialog(tk.Toplevel):
         left = tk.Frame(frame, bg=COLOR_BG_DARK)
         left.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        lbl = tk.Label(left, text=label_text, font=("Segoe UI", 10, "bold"), fg=COLOR_WHITE, bg=COLOR_BG_DARK)
+        lbl.pack(anchor="w")
+        if desc:
+            dlbl = tk.Label(left, text=desc, font=("Segoe UI", 8), fg=COLOR_TEXT_DIM, bg=COLOR_BG_DARK)
+            dlbl.pack(anchor="w")
+
         curr_raw = self.get_val(var_key, str(default_val))
         try:
             curr_val = int(curr_raw)
@@ -274,24 +367,20 @@ class SonySettingsDialog(tk.Toplevel):
         var = tk.IntVar(value=curr_val)
         self.vars[var_key] = var
 
-        val_lbl = tk.Label(frame, text=f"{curr_val} {unit}", font=("Segoe UI", 9, "bold"),
-                           fg=COLOR_GOLD, bg=COLOR_BG_DARK, width=8, anchor="e")
-        val_lbl.pack(side=tk.RIGHT)
+        # High-contrast rounded pill badge for value
+        pill_frame = tk.Frame(frame, bg=COLOR_CARD, bd=1, relief="solid", padx=8, pady=3)
+        pill_frame.pack(side=tk.RIGHT, padx=(10, 0))
 
-        lbl = tk.Label(left, text=label_text, font=("Segoe UI", 10, "bold"), fg=COLOR_WHITE, bg=COLOR_BG_DARK)
-        lbl.pack(anchor="w")
-        if desc:
-            dlbl = tk.Label(left, text=desc, font=("Segoe UI", 8), fg=COLOR_TEXT_DIM, bg=COLOR_BG_DARK)
-            dlbl.pack(anchor="w")
+        val_lbl = tk.Label(pill_frame, text=f"{curr_val} {unit}", font=("Segoe UI", 9, "bold"),
+                           fg=COLOR_GOLD, bg=COLOR_CARD, width=7, anchor="center")
+        val_lbl.pack()
 
-        def on_slide(val):
-            val_lbl.config(text=f"{int(float(val))} {unit}")
+        def on_slide(new_val):
+            val_lbl.config(text=f"{new_val} {unit}")
+            var.set(new_val)
 
-        slider = tk.Scale(frame, from_=from_, to=to_, orient=tk.HORIZONTAL, variable=var,
-                          showvalue=0, bg=COLOR_BG_DARK, fg=COLOR_WHITE,
-                          troughcolor=COLOR_CARD, highlightthickness=0, bd=0,
-                          activebackground=COLOR_GOLD, length=160, command=on_slide)
-        slider.pack(side=tk.RIGHT, padx=10)
+        slider = SonySlider(frame, from_, to_, curr_val, on_change=on_slide, width=190, height=28)
+        slider.pack(side=tk.RIGHT, padx=5)
         return frame
 
     def build_display_tab(self):
@@ -413,7 +502,6 @@ class SonyLauncherApp(tk.Tk):
         self.resizable(False, False)
         self.configure(bg=COLOR_BG_DARK)
 
-        # Set taskbar icon if available
         ico_path = get_base_dir() / "totk.ico"
         if not ico_path.is_file():
             ico_path = GAME_DIR / "runtime" / "totk.ico"
@@ -422,6 +510,9 @@ class SonyLauncherApp(tk.Tk):
                 self.iconbitmap(str(ico_path))
             except Exception:
                 pass
+
+        # Clean graceful exit
+        self.protocol("WM_DELETE_WINDOW", self.safe_quit)
 
         # Center on screen
         self.update_idletasks()
@@ -436,6 +527,10 @@ class SonyLauncherApp(tk.Tk):
         self.setup_background()
         self.setup_ui_overlay()
 
+    def safe_quit(self):
+        """Clean and instant exit preventing Tcl 9 alloc panics."""
+        os._exit(0)
+
     def setup_background(self):
         bg_path = get_base_dir() / "background.jpg"
         if not bg_path.is_file():
@@ -449,10 +544,10 @@ class SonyLauncherApp(tk.Tk):
                 im = Image.open(bg_path).convert("RGBA")
                 im = im.resize((1120, 630), Image.Resampling.LANCZOS)
                 
-                # Apply custom dark gradient on left third for contrast
+                # Apply custom dark gradient on left third and bottom for high contrast
                 gradient = Image.new("RGBA", (1120, 630), (0, 0, 0, 0))
-                for gx in range(500):
-                    alpha = int(220 * (1.0 - (gx / 500.0) ** 0.8))
+                for gx in range(540):
+                    alpha = int(225 * (1.0 - (gx / 540.0) ** 0.8))
                     for gy in range(630):
                         gradient.putpixel((gx, gy), (10, 12, 16, alpha))
                 im = Image.alpha_composite(im, gradient)
@@ -476,7 +571,7 @@ class SonyLauncherApp(tk.Tk):
             ("PLAY", self.launch_game, True),
             ("SETTINGS", self.open_settings, False),
             ("DIGITAL EXTRAS", self.open_extras, False),
-            ("QUIT", self.destroy, False)
+            ("QUIT", self.safe_quit, False)
         ]
 
         start_y = 230
@@ -489,7 +584,6 @@ class SonyLauncherApp(tk.Tk):
                                              font=("Segoe UI", 22, "bold"),
                                              fill=default_color, anchor="w", tags=f"btn_{i}")
 
-            # Hover events
             def on_enter(e, tid=txt_id, ip=is_play):
                 self.canvas.itemconfig(tid, fill=COLOR_GOLD_HOVER if ip else COLOR_GOLD)
                 self.config(cursor="hand2")
@@ -505,31 +599,36 @@ class SonyLauncherApp(tk.Tk):
             self.canvas.tag_bind(txt_id, "<Leave>", on_leave)
             self.canvas.tag_bind(txt_id, "<Button-1>", on_click)
 
-        # 3. Bottom Right Controls: Show Launcher Checkbox & Version
+        # 3. Bottom Right Controls in High-Contrast Frosted Dark Card
+        footer_card = tk.Frame(self, bg=COLOR_CARD, bd=1, relief="solid", padx=16, pady=10)
+        
         self.show_launcher_var = tk.BooleanVar(value=self.launcher_cfg.get("show_launcher", True))
 
         def on_toggle_launcher():
             self.launcher_cfg["show_launcher"] = self.show_launcher_var.get()
             save_launcher_config(self.launcher_cfg)
 
-        cb_frame = tk.Frame(self, bg="#000000", bd=0)
-        cb = tk.Checkbutton(self.canvas, text="SHOW LAUNCHER", variable=self.show_launcher_var,
-                            command=on_toggle_launcher, font=("Segoe UI", 9, "bold"),
-                            fg=COLOR_WHITE, bg=COLOR_BG_DARK, activebackground=COLOR_BG_DARK,
-                            activeforeground=COLOR_GOLD, selectcolor=COLOR_CARD, bd=0, highlightthickness=0)
-        self.canvas.create_window(980, 560, window=cb, anchor="e")
+        cb = tk.Checkbutton(footer_card, text="SHOW LAUNCHER", variable=self.show_launcher_var,
+                            command=on_toggle_launcher, font=("Segoe UI", 10, "bold"),
+                            fg=COLOR_WHITE, bg=COLOR_CARD, activebackground=COLOR_CARD,
+                            activeforeground=COLOR_GOLD, selectcolor=COLOR_CARD_BORDER,
+                            bd=0, highlightthickness=0, cursor="hand2")
+        cb.pack(anchor="e")
 
-        # Version Text
-        self.canvas.create_text(980, 590, text=f"V {VERSION_STRING}",
-                                font=("Segoe UI", 9, "bold"), fill=COLOR_TEXT_DIM, anchor="e")
+        # Crisp, high-contrast version label
+        ver_lbl = tk.Label(footer_card, text=f"V {VERSION_STRING}",
+                           font=("Segoe UI", 9, "bold"), fg=COLOR_GOLD, bg=COLOR_CARD)
+        ver_lbl.pack(anchor="e", pady=(4, 0))
 
-        # GitHub Link Button on Canvas (Bottom-Center / Left)
+        self.canvas.create_window(1050, 565, window=footer_card, anchor="se")
+
+        # GitHub Link Button on Canvas (Bottom-Left)
         gh_btn = tk.Button(self.canvas, text="★ GitHub Repository (STS78721)",
-                           font=("Segoe UI", 8, "bold"), fg=COLOR_GOLD, bg=COLOR_CARD,
+                           font=("Segoe UI", 9, "bold"), fg=COLOR_GOLD, bg=COLOR_CARD,
                            activebackground=COLOR_CARD_BORDER, activeforeground=COLOR_GOLD_HOVER,
-                           bd=1, relief="solid", padx=10, pady=4, cursor="hand2",
+                           bd=1, relief="solid", padx=14, pady=6, cursor="hand2",
                            command=lambda: webbrowser.open(GITHUB_URL))
-        self.canvas.create_window(70, 580, window=gh_btn, anchor="w")
+        self.canvas.create_window(70, 570, window=gh_btn, anchor="w")
 
     def launch_game(self):
         exe_path = GAME_DIR / "totk.exe"
@@ -539,7 +638,7 @@ class SonyLauncherApp(tk.Tk):
 
         try:
             subprocess.Popen([str(exe_path)], cwd=str(GAME_DIR))
-            self.destroy()
+            self.safe_quit()
         except Exception as e:
             messagebox.showerror("Launch Error", f"Failed to start totk.exe:\n{e}")
 
@@ -547,7 +646,6 @@ class SonyLauncherApp(tk.Tk):
         SonySettingsDialog(self)
 
     def open_extras(self):
-        # Open sleek popup menu with directory shortcuts & guides
         menu = tk.Menu(self, tearoff=0, bg=COLOR_CARD, fg=COLOR_WHITE,
                        activebackground=COLOR_GOLD, activeforeground="#000000",
                        font=("Segoe UI", 10, "bold"), bd=1)
@@ -565,7 +663,6 @@ class SonyLauncherApp(tk.Tk):
         menu.add_separator()
         menu.add_command(label="🎮  View In-Game Controller Guide", command=self.open_controller_guide)
 
-        # Show menu under mouse or button position
         menu.tk_popup(self.winfo_pointerx(), self.winfo_pointery())
 
     def open_controller_guide(self):
@@ -577,10 +674,8 @@ class SonyLauncherApp(tk.Tk):
 
 
 def main():
-    # If launched with --game or directly when show_launcher is disabled and shift isn't held
     cfg = load_launcher_config()
     
-    # Check if user holds Shift key on Windows
     shift_pressed = False
     try:
         import ctypes
@@ -592,7 +687,7 @@ def main():
         exe_path = GAME_DIR / "totk.exe"
         if exe_path.is_file():
             subprocess.Popen([str(exe_path)], cwd=str(GAME_DIR))
-            sys.exit(0)
+            os._exit(0)
 
     app = SonyLauncherApp()
     app.mainloop()
