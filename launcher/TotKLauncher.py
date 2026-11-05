@@ -14,6 +14,11 @@ import urllib.request
 import urllib.error
 import ctypes
 import shutil
+import tempfile
+import zipfile
+import time
+import base64
+from datetime import datetime
 from ctypes import wintypes
 from pathlib import Path
 import tkinter as tk
@@ -312,6 +317,96 @@ def save_ini_settings(ini_file, updates):
     with open(ini_file, "w", encoding="utf-8") as f:
         f.writelines(lines)
     return True
+
+UPDATE_FILES = {"totk.exe", "totklauncher.exe", "totk.ini", "totk.ini.example", "controller_guide.txt"}
+
+def merge_update_ini(current_ini, update_ini, output_ini):
+    """Preserve every existing user setting and add only new keys from an update's totk.ini."""
+    current_ini, update_ini, output_ini = Path(current_ini), Path(update_ini), Path(output_ini)
+    if not current_ini.is_file():
+        shutil.copy2(update_ini, output_ini)
+        return
+    lines = current_ini.read_text(encoding="utf-8", errors="ignore").splitlines(keepends=True)
+    existing = set(parse_ini(current_ini))
+    additions = []
+    for line in update_ini.read_text(encoding="utf-8", errors="ignore").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", ";", "[")) or "=" not in stripped:
+            continue
+        key = stripped.split("=", 1)[0].strip().lower()
+        if key and key not in existing:
+            additions.append(line.rstrip("\r\n"))
+            existing.add(key)
+    if additions:
+        if lines and not lines[-1].endswith(("\n", "\r")):
+            lines[-1] += "\n"
+        lines.extend(["\n# New settings supplied by the update; existing values were preserved.\n"]
+                     + [line + "\n" for line in additions])
+    output_ini.write_text("".join(lines), encoding="utf-8")
+
+def extract_update_archive(archive_path, stage_dir):
+    """Validate the official flat update archive and stage only recognized root files."""
+    archive_path, stage_dir = Path(archive_path), Path(stage_dir)
+    selected = {}
+    with zipfile.ZipFile(archive_path) as archive:
+        bad_member = archive.testzip()
+        if bad_member:
+            raise ValueError(f"Update archive CRC check failed for {bad_member}.")
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            name = info.filename
+            path = Path(name.replace("\\", "/"))
+            if path.is_absolute() or len(path.parts) != 1 or ".." in path.parts:
+                raise ValueError(f"Unexpected path in update archive: {name}")
+            mode = (info.external_attr >> 16) & 0o170000
+            if mode == 0o120000:
+                raise ValueError(f"Symbolic links are not allowed in updates: {name}")
+            key = path.name.casefold()
+            if key not in UPDATE_FILES:
+                continue
+            if key in selected:
+                raise ValueError(f"Duplicate update file: {name}")
+            if info.file_size <= 0:
+                raise ValueError(f"Update file is empty: {name}")
+            selected[key] = info
+        for required in ("totk.exe", "totklauncher.exe"):
+            if required not in selected:
+                raise ValueError(f"Update archive is missing {required}.")
+        if selected["totk.exe"].file_size < 1024 * 1024 or selected["totklauncher.exe"].file_size < 1024 * 1024:
+            raise ValueError("Update executable is unexpectedly small.")
+        for key, info in selected.items():
+            target_name = {"totk.exe": "totk.exe", "totklauncher.exe": "TotKLauncher.exe",
+                           "totk.ini": "totk.ini", "totk.ini.example": "totk.ini.example",
+                           "controller_guide.txt": "CONTROLLER_GUIDE.txt"}[key]
+            target = stage_dir / target_name
+            if key == "totk.ini":
+                incoming = stage_dir / "_update_totk.ini"
+                with archive.open(info) as source, incoming.open("wb") as dest:
+                    shutil.copyfileobj(source, dest)
+                merge_update_ini(GAME_DIR / "totk.ini", incoming, stage_dir / "totk.ini")
+                incoming.unlink(missing_ok=True)
+            else:
+                with archive.open(info) as source, target.open("wb") as dest:
+                    shutil.copyfileobj(source, dest)
+    return sorted(("TotKLauncher.exe" if path.name.casefold() == "totklauncher.exe" else
+                   "CONTROLLER_GUIDE.txt" if path.name.casefold() == "controller_guide.txt" else path.name)
+                  for path in stage_dir.iterdir() if path.is_file() and path.name.casefold() in UPDATE_FILES)
+
+def validate_update_game_executable(exe_path, game_dir, timeout=120):
+    """Require the staged game binary to pass the active v1.4.3 loader probe before installation."""
+    exe_path, game_dir = Path(exe_path), Path(game_dir)
+    command = [str(exe_path), "--exefs", str(game_dir / "exefs"), "--romfs", str(game_dir / "romfs"),
+               "--profile", str(game_dir / "profile"), "--probe-loader"]
+    result = subprocess.run(command, cwd=str(game_dir), capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=timeout)
+    output = result.stdout + "\n" + result.stderr
+    if (result.returncode != 0 or not re.search(r"game\s+1\.4\.3\b", output, re.IGNORECASE)
+            or "probe-loader: passed (0 failures)" not in output):
+        excerpt = output[-1800:].strip()
+        raise RuntimeError("The update executable did not pass the required game 1.4.3 loader probe. "
+                           "No GAME files were changed.\n" + excerpt)
+    return output
 
 def scan_mod_folders(mods_dir=MODS_DIR):
     """List immediate mod directories, including folders disabled with the .disabled suffix."""
@@ -875,6 +970,56 @@ class SonySettingsDialog(tk.Toplevel):
         self.create_row_dropdown(f, "Color Profile", "color_preset",
                                  ["default", "vivid", "clarity", "custom"], "default",
                                  "Custom tuning presets for vibrancy, gamma, contrast, and black level.")
+        warm_frame = tk.Frame(f, bg=COLOR_CARD, padx=14, pady=10,
+                              highlightthickness=1, highlightbackground=COLOR_CARD_BORDER)
+        warm_frame.pack(fill=tk.X, padx=20, pady=(8, 10))
+        self.warm_status = tk.Label(warm_frame, text="Warm the saved Vulkan pipeline cache before playing.",
+                                    font=("Segoe UI", 8), fg=COLOR_TEXT_DIM, bg=COLOR_CARD,
+                                    wraplength=440, justify="left")
+        self.warm_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.warm_button = tk.Button(warm_frame, text="⚡ PRE-WARM VULKAN SHADERS",
+                                     command=self.prewarm_shaders, font=("Segoe UI", 8, "bold"),
+                                     fg="#000000", bg=COLOR_GOLD, activebackground=COLOR_GOLD_HOVER,
+                                     bd=0, padx=12, pady=8, cursor="hand2")
+        self.warm_button.pack(side=tk.RIGHT, padx=(10, 0))
+
+    def prewarm_shaders(self):
+        if getattr(self, "warm_process_active", False):
+            return
+        exe = GAME_DIR / "totk.exe"
+        if not exe.is_file():
+            messagebox.showerror("Shader Pre-Warm", f"totk.exe was not found at:\n{exe}", parent=self)
+            return
+        self.warm_process_active = True
+        self.warm_button.config(state=tk.DISABLED, text="PRE-WARMING…")
+        self.warm_status.config(text="Compiling Vulkan pipeline cache for stutter-free gameplay...",
+                                fg=COLOR_GOLD)
+        threading.Thread(target=self._prewarm_worker, args=(exe,), daemon=True).start()
+
+    def _prewarm_worker(self, exe):
+        try:
+            process = subprocess.Popen([str(exe), "--warm-shaders"], cwd=str(GAME_DIR),
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, encoding="utf-8", errors="replace", bufsize=1)
+            self.warm_shader_process = process
+            for _line in process.stdout:
+                pass
+            code = process.wait()
+            if code == 0:
+                message, color = "✅ Shaders optimized and pre-warmed! Ready for butter-smooth play.", COLOR_ACCENT_GREEN
+            else:
+                message, color = f"Shader pre-warm failed (exit code {code}). See GAME/logs for details.", "#ff7373"
+        except Exception as exc:
+            message, color = f"Shader pre-warm failed: {exc}", "#ff7373"
+        try:
+            self.after(0, lambda: self._finish_prewarm(message, color))
+        except tk.TclError:
+            pass
+
+    def _finish_prewarm(self, message, color):
+        self.warm_process_active = False
+        self.warm_button.config(state=tk.NORMAL, text="⚡ PRE-WARM VULKAN SHADERS")
+        self.warm_status.config(text=message, fg=color)
 
     def build_audio_tab(self):
         f = self.tab_audio
@@ -1029,6 +1174,163 @@ class ModsManagerDialog(tk.Toplevel):
             messagebox.showerror("Cannot Open Mods Folder", str(exc), parent=self)
 
 
+def create_save_snapshot(profile_dir, backups_dir=None, suffix=""):
+    """Copy profile/save to a uniquely named snapshot beneath profile/backups."""
+    profile_dir = Path(profile_dir)
+    save_dir = profile_dir / "save"
+    backups_dir = Path(backups_dir) if backups_dir else profile_dir / "backups"
+    if not save_dir.is_dir():
+        raise FileNotFoundError(f"Save folder not found: {save_dir}")
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    base = f"save_{stamp}" + (f"_{suffix}" if suffix else "")
+    destination = backups_dir / base
+    index = 2
+    while destination.exists():
+        destination = backups_dir / f"{base}_{index}"
+        index += 1
+    shutil.copytree(save_dir, destination)
+    return destination
+
+def restore_save_snapshot(profile_dir, snapshot_dir):
+    """Create a pre-restore safety snapshot and replace profile/save transactionally."""
+    profile_dir, snapshot_dir = Path(profile_dir), Path(snapshot_dir)
+    save_dir, backups_dir = profile_dir / "save", profile_dir / "backups"
+    try:
+        snapshot_dir.resolve().relative_to(backups_dir.resolve())
+    except ValueError:
+        raise ValueError("The selected snapshot is outside the profile backup folder.") from None
+    if not snapshot_dir.is_dir() or not any(snapshot_dir.iterdir()):
+        raise ValueError("The selected snapshot is missing or empty.")
+    safety = create_save_snapshot(profile_dir, backups_dir, "before-restore")
+    staged = profile_dir / f".save-restore-{os.getpid()}-{time.time_ns()}"
+    old = profile_dir / f".save-previous-{os.getpid()}-{time.time_ns()}"
+    try:
+        shutil.copytree(snapshot_dir, staged)
+        if save_dir.exists():
+            save_dir.rename(old)
+        staged.rename(save_dir)
+        if old.exists():
+            shutil.rmtree(old)
+    except Exception:
+        if not save_dir.exists() and old.exists():
+            old.rename(save_dir)
+        shutil.rmtree(staged, ignore_errors=True)
+        raise
+    return safety
+
+def game_process_running():
+    """Best-effort check that TotK is closed before snapshotting or restoring saves."""
+    if os.name == "nt":
+        try:
+            result = subprocess.run(["tasklist.exe", "/FI", "IMAGENAME eq totk.exe", "/FO", "CSV", "/NH"],
+                                    capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                return True
+            return '"totk.exe"' in result.stdout.casefold()
+        except Exception:
+            return True
+    checked = False
+    for name in ("totk", "totk.exe"):
+        try:
+            result = subprocess.run(["pgrep", "-x", name], capture_output=True, text=True, timeout=3)
+            checked = True
+            if result.returncode == 0:
+                return True
+        except Exception:
+            pass
+    return not checked
+
+
+class SaveBackupVaultDialog(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Save Backup Vault")
+        self.geometry("680x460")
+        self.minsize(560, 360)
+        self.configure(bg=COLOR_BG_DARK)
+        self.transient(parent)
+        self.profile_dir = GAME_DIR / "profile"
+        self.backups_dir = self.profile_dir / "backups"
+        self.snapshots = []
+
+        header = tk.Frame(self, bg=COLOR_CARD, padx=20, pady=14)
+        header.pack(fill=tk.X)
+        tk.Label(header, text="SAVE BACKUP VAULT", font=("Segoe UI", 13, "bold"),
+                 fg=COLOR_GOLD, bg=COLOR_CARD).pack(anchor="w")
+        tk.Label(header, text="Snapshots are stored in GAME/profile/backups/.",
+                 font=("Segoe UI", 9), fg=COLOR_TEXT_DIM, bg=COLOR_CARD).pack(anchor="w", pady=(3, 0))
+
+        body = tk.Frame(self, bg=COLOR_BG_DARK)
+        body.pack(fill=tk.BOTH, expand=True, padx=20, pady=14)
+        tk.Label(body, text="Available snapshots", font=("Segoe UI", 10, "bold"),
+                 fg=COLOR_WHITE, bg=COLOR_BG_DARK).pack(anchor="w", pady=(0, 8))
+        self.snapshot_list = tk.Listbox(body, bg=COLOR_CARD, fg=COLOR_WHITE, selectbackground=COLOR_TAB_ACTIVE,
+                                        selectforeground=COLOR_GOLD, font=("Segoe UI", 9),
+                                        highlightthickness=1, highlightbackground=COLOR_CARD_BORDER,
+                                        activestyle="none")
+        self.snapshot_list.pack(fill=tk.BOTH, expand=True)
+
+        footer = tk.Frame(self, bg=COLOR_CARD, padx=14, pady=12)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Button(footer, text="CREATE BACKUP SNAPSHOT", command=self.create_snapshot,
+                  font=("Segoe UI", 8, "bold"), fg="#000000", bg=COLOR_GOLD,
+                  activebackground=COLOR_GOLD_HOVER, bd=0, padx=12, pady=8).pack(side=tk.LEFT)
+        tk.Button(footer, text="RESTORE BACKUP", command=self.restore_snapshot,
+                  font=("Segoe UI", 8, "bold"), fg=COLOR_WHITE, bg=COLOR_BUTTON_HOVER,
+                  activebackground=COLOR_GOLD, bd=0, padx=12, pady=8).pack(side=tk.LEFT, padx=8)
+        tk.Button(footer, text="OPEN BACKUPS FOLDER", command=self.open_backups,
+                  font=("Segoe UI", 8, "bold"), fg=COLOR_WHITE, bg=COLOR_BUTTON_HOVER,
+                  activebackground=COLOR_GOLD, bd=0, padx=12, pady=8).pack(side=tk.RIGHT)
+        self.refresh()
+
+    def refresh(self):
+        self.backups_dir.mkdir(parents=True, exist_ok=True)
+        self.snapshots = sorted((p for p in self.backups_dir.iterdir() if p.is_dir() and p.name.startswith("save_")),
+                                key=lambda p: p.name, reverse=True)
+        self.snapshot_list.delete(0, tk.END)
+        for snapshot in self.snapshots:
+            self.snapshot_list.insert(tk.END, snapshot.name)
+        if not self.snapshots:
+            self.snapshot_list.insert(tk.END, "No save snapshots yet")
+
+    def create_snapshot(self):
+        if game_process_running():
+            messagebox.showwarning("Close the Game First", "Close totk.exe before creating a save snapshot.", parent=self)
+            return
+        try:
+            snapshot = create_save_snapshot(self.profile_dir, self.backups_dir)
+            self.refresh()
+            messagebox.showinfo("Backup Created", f"Save snapshot created:\n{snapshot.name}", parent=self)
+        except Exception as exc:
+            messagebox.showerror("Backup Failed", str(exc), parent=self)
+
+    def restore_snapshot(self):
+        selection = self.snapshot_list.curselection()
+        if not selection or selection[0] >= len(self.snapshots):
+            messagebox.showinfo("Select a Backup", "Select a save snapshot to restore.", parent=self)
+            return
+        if game_process_running():
+            messagebox.showwarning("Close the Game First", "Close totk.exe before restoring a save snapshot.", parent=self)
+            return
+        snapshot = self.snapshots[selection[0]]
+        if not messagebox.askyesno("Confirm Save Restore",
+                                   f"Restore {snapshot.name}? The current save will first be backed up automatically.",
+                                   parent=self):
+            return
+        try:
+            safety = restore_save_snapshot(self.profile_dir, snapshot)
+            self.refresh()
+            messagebox.showinfo("Backup Restored", f"Restored {snapshot.name}.\nCurrent save snapshot: {safety.name}",
+                                parent=self)
+        except Exception as exc:
+            messagebox.showerror("Restore Failed", str(exc), parent=self)
+
+    def open_backups(self):
+        self.backups_dir.mkdir(parents=True, exist_ok=True)
+        open_folder(self.backups_dir)
+
+
 # --- Sony-style Main Launcher Window ---
 class SonyLauncherApp(tk.Tk):
     def __init__(self):
@@ -1174,6 +1476,13 @@ class SonyLauncherApp(tk.Tk):
                                activeforeground="#000000", bd=0, padx=10, pady=5, cursor="hand2",
                                command=self.check_for_updates)
         update_btn.pack(anchor="e", pady=(6, 0))
+        self.update_action_btn = tk.Button(
+            footer_card, text="⚡ UPDATE NOW (1-CLICK)", command=self.apply_latest_update,
+            font=("Segoe UI", 8, "bold"), fg="#000000", bg=COLOR_GOLD,
+            activebackground=COLOR_GOLD_HOVER, bd=0, padx=10, pady=6, cursor="hand2")
+        self.update_action_btn.pack_forget()
+        self.latest_release = None
+        self.update_in_progress = False
 
         self.canvas.create_window(1050, 565, window=footer_card, anchor="se")
 
@@ -1216,6 +1525,8 @@ class SonyLauncherApp(tk.Tk):
             messagebox.showerror("Launch Error", f"Failed to start totk.exe:\n{e}")
 
     def check_for_updates(self):
+        self.latest_release = None
+        self.update_action_btn.pack_forget()
         self.update_status.config(text="Checking GitHub Releases…", fg=COLOR_TEXT_DIM)
         threading.Thread(target=self._check_releases_worker, daemon=True).start()
 
@@ -1230,35 +1541,154 @@ class SonyLauncherApp(tk.Tk):
             page = release.get("html_url", GITHUB_URL + "/releases/latest")
             if not tag:
                 raise ValueError("The latest release did not include a version tag.")
-            self.after(0, lambda: self._show_release_result(tag, title, page))
+            assets = release.get("assets", [])
+            asset_name = f"totk-pc-recomp-{tag}-update.zip"
+            asset = next((item for item in assets if item.get("name", "").casefold() == asset_name.casefold()), None)
+            asset_url = asset.get("browser_download_url") if asset else None
+            self.after(0, lambda: self._show_release_result(tag, title, page, asset_url, asset_name))
         except Exception as exc:
             detail = str(exc)
             self.after(0, lambda: self.update_status.config(text=f"Update check failed: {detail}", fg="#ff7373"))
 
-    def _show_release_result(self, tag, title, page):
+    def _show_release_result(self, tag, title, page, asset_url=None, asset_name=None):
         release_version = title.split(":", 1)[0].strip()
         if (tag.casefold() == VERSION_STRING.casefold() or title.casefold() == VERSION_STRING.casefold()
                 or release_version.casefold() == VERSION_STRING.casefold()):
             self.update_status.config(text=f"You are on the latest build ({VERSION_STRING})!", fg=COLOR_ACCENT_GREEN)
+            self.update_action_btn.pack_forget()
             return
-        self.update_status.config(text=f"Update available: {title}", fg=COLOR_GOLD)
-        dialog = tk.Toplevel(self)
-        dialog.title("Update Available")
-        dialog.configure(bg=COLOR_BG_DARK)
-        dialog.resizable(False, False)
-        dialog.transient(self)
-        tk.Label(dialog, text=f"A newer build is available:\n{title}", font=("Segoe UI", 11, "bold"),
-                 fg=COLOR_WHITE, bg=COLOR_BG_DARK, padx=28, pady=22).pack()
-        actions = tk.Frame(dialog, bg=COLOR_BG_DARK)
-        actions.pack(pady=(0, 20))
-        tk.Button(actions, text="Download on GitHub", command=lambda: (webbrowser.open(page), dialog.destroy()),
-                  font=("Segoe UI", 9, "bold"), fg="#000000", bg=COLOR_GOLD, bd=0, padx=14, pady=8,
-                  cursor="hand2").pack(side=tk.LEFT, padx=6)
-        tk.Button(actions, text="Later", command=dialog.destroy, font=("Segoe UI", 9), fg=COLOR_WHITE,
-                  bg=COLOR_BUTTON_HOVER, bd=0, padx=14, pady=8, cursor="hand2").pack(side=tk.LEFT, padx=6)
-        dialog.update_idletasks()
-        dialog.geometry(f"+{self.winfo_rootx() + (self.winfo_width() - dialog.winfo_width()) // 2}+"
-                        f"{self.winfo_rooty() + (self.winfo_height() - dialog.winfo_height()) // 2}")
+        if not asset_url:
+            self.update_status.config(text=f"Update found ({title}), but its update ZIP is missing.", fg="#ff7373")
+            self.update_action_btn.pack_forget()
+            return
+        self.latest_release = {"tag": tag, "title": title, "page": page,
+                               "asset_url": asset_url, "asset_name": asset_name}
+        self.update_status.config(text="")
+        self.update_action_btn.pack(anchor="e", pady=(5, 0))
+        self.update_action_btn.config(state=tk.NORMAL)
+
+    def apply_latest_update(self):
+        if self.update_in_progress or not self.latest_release:
+            return
+        if game_process_running():
+            messagebox.showwarning("Close the Game First", "Close totk.exe before applying a launcher/game update.",
+                                   parent=self)
+            return
+        if not messagebox.askyesno("Install Update", f"Download and apply {self.latest_release['title']} now?",
+                                   parent=self):
+            return
+        self.update_in_progress = True
+        self.update_action_btn.config(state=tk.DISABLED, text="DOWNLOADING UPDATE…")
+        self.update_status.config(text="Connecting to GitHub Releases…", fg=COLOR_TEXT_DIM)
+        threading.Thread(target=self._download_update_worker, args=(self.latest_release.copy(),), daemon=True).start()
+
+    def _download_update_worker(self, release):
+        stage = None
+        try:
+            GAME_DIR.mkdir(parents=True, exist_ok=True)
+            stage = Path(tempfile.mkdtemp(prefix=".totk-update-", dir=GAME_DIR))
+            archive_path = stage / release["asset_name"]
+            request = urllib.request.Request(release["asset_url"], headers={"User-Agent": "TotKLauncher",
+                                                                            "Accept": "application/octet-stream"})
+            with urllib.request.urlopen(request, timeout=60) as response, archive_path.open("wb") as output:
+                total = int(response.headers.get("Content-Length", "0") or 0)
+                downloaded = 0
+                while True:
+                    block = response.read(1024 * 1024)
+                    if not block:
+                        break
+                    output.write(block)
+                    downloaded += len(block)
+                    if total:
+                        percent = min(100, downloaded * 100 // total)
+                        self._set_update_status(f"Downloading update… {percent}%", COLOR_TEXT_DIM)
+            self._set_update_status("Validating update archive…", COLOR_TEXT_DIM)
+            files = extract_update_archive(archive_path, stage)
+            archive_path.unlink(missing_ok=True)
+            if not {"totk.exe", "TotKLauncher.exe"}.issubset(set(files)):
+                raise ValueError("The validated update is missing a required executable.")
+            self._set_update_status("Checking updated game files against the installed 1.4.3 content…", COLOR_TEXT_DIM)
+            validate_update_game_executable(stage / "totk.exe", GAME_DIR)
+            self.after(0, lambda: self._update_ready(release, stage, files))
+        except Exception as exc:
+            if stage:
+                shutil.rmtree(stage, ignore_errors=True)
+            detail = str(exc)
+            self.after(0, lambda: self._update_failed(detail))
+
+    def _set_update_status(self, text, color):
+        try:
+            self.after(0, lambda: self.update_status.config(text=text, fg=color))
+        except tk.TclError:
+            pass
+
+    def _update_failed(self, detail):
+        self.update_in_progress = False
+        self.update_action_btn.config(state=tk.NORMAL, text="⚡ UPDATE NOW (1-CLICK)")
+        self.update_status.config(text=f"Update failed: {detail}", fg="#ff7373")
+
+    def _update_ready(self, release, stage, files):
+        if not messagebox.askyesno("Update Ready", f"{release['title']} is downloaded and validated. "
+                                   "Install it now? The launcher will close, replace the files, then restart.",
+                                   parent=self):
+            shutil.rmtree(stage, ignore_errors=True)
+            self.update_in_progress = False
+            self.update_action_btn.config(state=tk.NORMAL, text="⚡ UPDATE NOW (1-CLICK)")
+            self.update_status.config(text="Update downloaded; installation cancelled.", fg=COLOR_TEXT_DIM)
+            return
+        try:
+            self._start_update_relauncher(stage, release["title"])
+            os._exit(0)
+        except Exception as exc:
+            shutil.rmtree(stage, ignore_errors=True)
+            self._update_failed(str(exc))
+
+    def _start_update_relauncher(self, stage, title):
+        def ps_quote(value):
+            return "'" + str(value).replace("'", "''") + "'"
+        game_path = ps_quote(GAME_DIR.resolve())
+        stage_path = ps_quote(Path(stage).resolve())
+        title_text = ps_quote(title)
+        script = f"""
+$ErrorActionPreference = 'Stop'
+$game = {game_path}
+$stage = {stage_path}
+$rollback = Join-Path $stage '_rollback'
+New-Item -ItemType Directory -Force -Path $rollback | Out-Null
+$changed = [System.Collections.Generic.List[string]]::new()
+try {{
+    Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 700
+    foreach ($name in @('totk.exe','totk.ini','totk.ini.example','CONTROLLER_GUIDE.txt','TotKLauncher.exe')) {{
+        $source = Join-Path $stage $name
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {{ continue }}
+        $target = Join-Path $game $name
+        $backup = Join-Path $rollback $name
+        if (Test-Path -LiteralPath $target -PathType Leaf) {{ Copy-Item -LiteralPath $target -Destination $backup -Force }}
+        $changed.Add($name)
+        $newFile = $target + '.update-new'
+        Copy-Item -LiteralPath $source -Destination $newFile -Force
+        Move-Item -LiteralPath $newFile -Destination $target -Force
+    }}
+}} catch {{
+    try {{ Add-Type -AssemblyName System.Windows.Forms }} catch {{}}
+    for ($i = $changed.Count - 1; $i -ge 0; $i--) {{
+        $name = $changed[$i]; $target = Join-Path $game $name; $backup = Join-Path $rollback $name
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {{ Copy-Item -LiteralPath $backup -Destination $target -Force }}
+        else {{ Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue }}
+    }}
+    [System.Windows.Forms.MessageBox]::Show(('Update failed and changes were rolled back: ' + $_.Exception.Message), 'Update Failed') | Out-Null
+    exit 1
+}}
+try {{ Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(({title_text} + ' installed successfully. The launcher will restart.'), 'Update Complete') | Out-Null }} catch {{}}
+Start-Process -FilePath (Join-Path $game 'TotKLauncher.exe') -WorkingDirectory $game
+Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+"""
+        encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0)
+        subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                          "-EncodedCommand", encoded], cwd=str(GAME_DIR), creationflags=flags,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def open_settings(self):
         SonySettingsDialog(self)
@@ -1276,6 +1706,7 @@ class SonyLauncherApp(tk.Tk):
         menu.add_command(label="🌐  Visit GitHub Repository", command=lambda: webbrowser.open(GITHUB_URL))
         menu.add_command(label="⬆  Check for Updates", command=self.check_for_updates)
         menu.add_command(label="🧩  Open Mod Manager", command=self.open_mod_manager)
+        menu.add_command(label="🛡  Save Backup Vault", command=self.open_save_backup_vault)
         menu.add_separator()
         menu.add_command(label="📁  Open Mods Folder (mods/)", command=lambda: open_dir("mods", "Mods"))
         menu.add_command(label="💾  Open Save Directory (profile/save/)", command=lambda: open_dir("profile/save", "Saves"))
@@ -1287,6 +1718,9 @@ class SonyLauncherApp(tk.Tk):
 
     def open_mod_manager(self):
         ModsManagerDialog(self)
+
+    def open_save_backup_vault(self):
+        SaveBackupVaultDialog(self)
 
     def open_controller_guide(self):
         guide_p = GAME_DIR / "CONTROLLER_GUIDE.txt"

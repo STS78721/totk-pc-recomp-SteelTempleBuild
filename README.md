@@ -45,6 +45,9 @@ Our goal is not just to run the game on PC—it is to **elevate *Tears of the Ki
 - **Controller Battery Overlay:** The compact performance HUD shows the active controller's reported battery level or charging state when available.
 - **Ultrawide HUD Patcher:** The launcher offers an asynchronous 21:9/32:9 layout patch generated from the installed RomFS.
 - **Steam Deck / Handheld Preset:** Apply 1280x800, a 40 FPS cap, FSR balanced upscaling, and reduced shadow settings from Display settings; Proton/Wine launches use native platform fallbacks when available.
+- **One-Click Update:** Download and validate the matching GitHub update ZIP, preserve existing `totk.ini` values while merging new defaults, then replace the included game and launcher files with rollback copies.
+- **Vulkan Shader Pre-Warm:** Run the renderer's shader pipeline cache pre-warm from Graphics settings and see completion or failure status.
+- **Save Backup Vault:** Snapshot `profile/save/`, restore a selected snapshot with confirmation, and automatically snapshot the current save before restore.
 
 ---
 

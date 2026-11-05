@@ -4,6 +4,11 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 
 ---
 
+## [Unreleased]
+- Add a validated one-click GitHub update download/apply flow, a Vulkan shader pre-warm action, and a Save Backup Vault with pre-restore snapshots.
+
+---
+
 ## [Beta 5e Hotfix] - 2026-11-05
 
 ### 🎮 In-Game Overlay & Controller Features
