@@ -1580,6 +1580,33 @@ class SonyLauncherApp(tk.Tk):
             messagebox.showerror("Error", f"Game executable not found at:\n{exe_path}")
             return
 
+        # Pre-flight game data validation: prevent console flash/crash for users missing exefs or romfs
+        missing = []
+        has_exefs = (GAME_DIR / "exefs").is_dir() and (
+            (GAME_DIR / "exefs" / "main.npdm").is_file() or (GAME_DIR / "exefs" / "main").is_file()
+        )
+        if not has_exefs:
+            missing.append("• exefs/ folder (contains main.npdm, main, etc. from your v1.4.3 update dump)")
+
+        has_romfs = (GAME_DIR / "romfs").is_dir() and (
+            (GAME_DIR / "romfs" / "romfs.bin").is_file() or (GAME_DIR / "romfs-index.bin").is_file() or
+            any((GAME_DIR / "romfs").iterdir())
+        )
+        if not has_romfs:
+            missing.append("• romfs/ folder (contains base game + update game assets or romfs.bin)")
+
+        if missing:
+            details = "\n".join(missing)
+            msg = (
+                "Cannot start Tears of the Kingdom because essential game files are missing:\n\n"
+                f"{details}\n\n"
+                f"Please copy your dumped game folders directly into:\n{GAME_DIR}\n\n"
+                "Would you like to open the game folder now so you can paste them in?"
+            )
+            if messagebox.askyesno("Missing Game Files", msg, icon="warning", parent=self):
+                open_folder(GAME_DIR)
+            return
+
         try:
             subprocess.Popen(command, cwd=str(GAME_DIR))
             self.safe_quit()
@@ -1823,7 +1850,10 @@ def main():
 
     if not cfg.get("show_launcher", True) and not shift_pressed and "--launcher" not in sys.argv:
         exe_path = GAME_DIR / "totk.exe"
-        if exe_path.is_file():
+        has_exefs = (GAME_DIR / "exefs").is_dir() and (
+            (GAME_DIR / "exefs" / "main.npdm").is_file() or (GAME_DIR / "exefs" / "main").is_file()
+        )
+        if exe_path.is_file() and has_exefs:
             if os.name != "nt" and exe_path.suffix.lower() == ".exe":
                 wine = os.environ.get("TOTK_WINE") or shutil.which("wine") or shutil.which("wine64")
                 if not wine:

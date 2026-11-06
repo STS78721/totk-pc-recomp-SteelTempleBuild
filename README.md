@@ -130,9 +130,19 @@ If you already have a working game folder or are switching from upstream recomp:
 ### 🎮 2. New Players (Fresh Standalone Setup)
 1. Download **[`TotK-Recomp-SteelTemple-Beta-5e.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/TotK-Recomp-SteelTemple-Beta-5e.zip)** (505 MB).
 2. Extract the archive into your chosen game folder (e.g. `C:\Games\Tears of the Kingdom PC\GAME`).
-   - *This includes the standalone `TotKLauncher.exe`, `totk.exe`, `SDL3.dll`, all multi-vendor AI upscaler DLLs, controller configs, and aspect ratio patches.*
-3. Copy your dumped **`romfs`** folder (from your legally owned 1.4.3 game dump) into this folder.
-4. Launch **`TotKLauncher.exe`** to configure graphics and jump in!
+   - *This includes the pre-compiled `TotKLauncher.exe`, `totk.exe`, `SDL3.dll`, all multi-vendor AI upscalers (DLSS 4.5 / XeSS / FSR), controller configs, and aspect ratio patches.*
+3. Copy **both** your dumped **`exefs`** and **`romfs`** folders (from your legally owned 1.4.3 game dump) directly into this folder.
+   Your game directory should look like this:
+   ```text
+   GAME/
+   ├── totk.exe
+   ├── TotKLauncher.exe
+   ├── SDL3.dll, libopus-0.dll, etc.
+   ├── exefs/            <-- Contains main.npdm, main, sdk, subsdk0 (from 1.4.3 update)
+   ├── romfs/            <-- Contains game assets (or romfs.bin)
+   └── ...
+   ```
+4. Launch **`TotKLauncher.exe`** to configure graphics, pre-warm shaders, apply Ultrawide HUD fixes if needed, and hit Play!
 
 ### 🛠️ 3. Modern Setup & Configuration Utility (Optional)
 - Download **[`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe)** (or portable zip **`TotK-Setup-Modern-Beta-5e-windows.zip`**).
