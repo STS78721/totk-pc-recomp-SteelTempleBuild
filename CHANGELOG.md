@@ -25,7 +25,11 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 - **Tactile Audio & UI Polish:** Zonai stone-carving audio cues on button clicks and hover states, custom high-contrast sliders with live numeric badges, and primary GPU auto-detection.
 
 ### 📦 Setup Wizard & Engine Packaging
-- **Bundled Setup Wizard:** The standalone installer wizard (`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe`) now bundles `TotKLauncher.exe` and offers optional 1-click desktop shortcut creation.
+- **Unified Release Package Architecture:** Adopted clean, distinct distribution package names:
+  - `SteelTemple-TotK-Beta5e-Update.zip` (~117 MB) — In-place update for existing Beta 5x installs.
+  - `SteelTemple-TotK-Beta5e-Portable-StandAlone.zip` (~505 MB) — Recommended zero-install complete environment.
+  - `SteelTemple-TotK-Beta5e-Full-Setup-Wizard.exe` (~64 MB) — Interactive Windows installer with shortcut creation.
+- **ExeFS & RomFS Startup Validation:** `TotKLauncher.exe` now verifies that required `exefs/` (v1.4.3 `main.npdm`) and `romfs/` folders exist before launching, displaying an intuitive troubleshooting dialog instead of allowing a silent exit.
 - **Game Version 1.4.3 Build System:** Updated build pipelines to fully support ExeFS v1.4.3 hashes, ensuring zero startup integrity errors.
 - **Developer Tools:** Added `tools/post_issue_comment.py` to automate authenticated GitHub issue communication using local git credential helpers.
 

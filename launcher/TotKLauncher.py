@@ -1631,8 +1631,17 @@ class SonyLauncherApp(tk.Tk):
             if not tag:
                 raise ValueError("The latest release did not include a version tag.")
             assets = release.get("assets", [])
-            asset_name = f"totk-pc-recomp-{tag}-update.zip"
-            asset = next((item for item in assets if item.get("name", "").casefold() == asset_name.casefold()), None)
+            tag_clean = tag.replace("-", "").replace(".", "")
+            candidates = [
+                f"SteelTemple-TotK-{tag}-Update.zip",
+                f"SteelTemple-TotK-{tag_clean}-Update.zip",
+                f"SteelTemple-TotK-Update-{tag}.zip",
+                f"totk-pc-recomp-{tag}-update.zip",
+            ]
+            asset = next((item for item in assets for cand in candidates if item.get("name", "").casefold() == cand.casefold()), None)
+            if not asset:
+                asset = next((item for item in assets if "update" in item.get("name", "").lower() and item.get("name", "").lower().endswith(".zip")), None)
+            asset_name = asset.get("name") if asset else f"SteelTemple-TotK-{tag}-Update.zip"
             asset_url = asset.get("browser_download_url") if asset else None
             self.after(0, lambda: self._show_release_result(tag, title, page, asset_url, asset_name))
         except Exception as exc:

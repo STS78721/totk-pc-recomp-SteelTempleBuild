@@ -119,19 +119,13 @@ Every idea is welcome, whether you're a casual player enjoying Hyrule on your co
 
 ## 📥 Quick Start & Downloads
 
-Grab the latest prebuilt packages from our **[Latest Release (Beta 5e Hotfix)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-5e)**:
+Grab the latest prebuilt packages from our **[Latest Release (Beta 5e)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-5e)**:
 
-### ⚡ 1. Upgrading / Moving from Another Recomp (Zero Recompiling Needed)
-If you already have a working game folder or are switching from upstream recomp:
-1. Download **[`totk-pc-recomp-Beta-5e-update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/totk-pc-recomp-Beta-5e-update.zip)** (116 MB).
-2. Extract and replace **`totk.exe`**, **`TotKLauncher.exe`**, and **`totk.ini`** directly into your existing game directory.
-3. Launch **`TotKLauncher.exe`** to dial in your settings and hit Play, or start **`totk.exe`** directly! Your existing save games, settings, and RomFS will work seamlessly.
-
-### 🎮 2. New Players (Fresh Standalone Setup)
-1. Download **[`TotK-Recomp-SteelTemple-Beta-5e.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/TotK-Recomp-SteelTemple-Beta-5e.zip)** (505 MB).
-2. Extract the archive into your chosen game folder (e.g. `C:\Games\Tears of the Kingdom PC\GAME`).
-   - *This includes the pre-compiled `TotKLauncher.exe`, `totk.exe`, `SDL3.dll`, all multi-vendor AI upscalers (DLSS 4.5 / XeSS / FSR), controller configs, and aspect ratio patches.*
-3. Copy **both** your dumped **`exefs`** and **`romfs`** folders (from your legally owned 1.4.3 game dump) directly into this folder.
+### 🎮 1. New Players (Fresh Standalone Setup)
+👉 **Download: [`SteelTemple-TotK-Beta5e-Portable-StandAlone.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/SteelTemple-TotK-Beta5e-Portable-StandAlone.zip)** (505 MB)
+1. Extract the archive into your chosen game folder (e.g. `C:\Games\Tears of the Kingdom PC\GAME`).
+   - *Includes the pre-compiled `TotKLauncher.exe`, `totk.exe`, `SDL3.dll`, all multi-vendor AI upscalers (DLSS 4.5 / XeSS / FSR), controller configs, and aspect ratio patches.*
+2. Copy **both** your dumped **`exefs`** and **`romfs`** folders (from your legally owned 1.4.3 game dump) directly into this folder.
    Your game directory should look like this:
    ```text
    GAME/
@@ -142,16 +136,25 @@ If you already have a working game folder or are switching from upstream recomp:
    ├── romfs/            <-- Contains game assets (or romfs.bin)
    └── ...
    ```
-4. Launch **`TotKLauncher.exe`** to configure graphics, pre-warm shaders, apply Ultrawide HUD fixes if needed, and hit Play!
+3. Launch **`TotKLauncher.exe`** to configure graphics, pre-warm shaders, apply Ultrawide HUD fixes if needed, and hit **Play**!
 
-### 🛠️ 3. Modern Setup & Configuration Utility (Optional)
-- Download **[`The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/The-Legend-of-Zelda-Tears-of-the-Kingdom-Setup-Beta-5e.exe)** (or portable zip **`TotK-Setup-Modern-Beta-5e-windows.zip`**).
-- Use this wizard to:
-  - Configure multi-vendor AI upscalers (NVIDIA DLSS 4.5, DLSS-NR, Intel XeSS).
-  - Install custom Controller UI prompt themes (PlayStation 5 DualSense, DualShock 4, Xbox).
-  - Automatically detect and migrate your saves from Yuzu, Ryujinx, or previous recomp builds.
-  - Create a 1-click Desktop shortcut pointing directly to the new Sony-style Launcher!
-  - The standalone setup wizard includes and installs `TotKLauncher.exe` before creating the optional shortcut.
+---
+
+### ⚡ 2. Upgrading / Moving from Another Recomp (Zero Recompiling Needed)
+👉 **Download: [`SteelTemple-TotK-Beta5e-Update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/SteelTemple-TotK-Beta5e-Update.zip)** (117 MB)
+1. If you already have a working game folder or are switching from upstream recomp:
+2. Extract and replace **`totk.exe`**, **`TotKLauncher.exe`**, and updated configs directly into your existing game directory.
+3. Launch **`TotKLauncher.exe`** to dial in your settings and hit Play, or start **`totk.exe`** directly! Your existing save games, settings, and RomFS will work seamlessly.
+
+---
+
+### 🛠️ 3. Setup & Configuration Wizard (Companion Tool)
+👉 **Download: [`SteelTemple-TotK-Beta5e-Full-Setup-Wizard.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-5e/SteelTemple-TotK-Beta5e-Full-Setup-Wizard.exe)** (64 MB)
+- This optional utility runs on top of your game directory to:
+  - Automatically detect and migrate your saves from Yuzu, Ryujinx, Sudachi, or previous recomp builds into `profile/save/`.
+  - Install custom Controller UI prompt themes (PlayStation 5 DualSense, DualShock 4, Xbox) to `mods/`.
+  - Create a 1-click Desktop shortcut pointing directly to `TotKLauncher.exe`.
+  - Configure vendor AI upscaler packages (DLSS 4.5, DLSS-NR, Intel XeSS).
 
 ---
 
