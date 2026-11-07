@@ -329,11 +329,6 @@ uint64_t vk_reflex_current_present_id(void) {
 void vk_reflex_sleep(void) {
     VkCtx *c = vk_ctx();
     if (!c || !c->has_nv_reflex || !g_reflex_sleep || !g_reflex_sem || g_reflex_mode <= 0) return;
-    plat_rmutex_lock(&g_pl);
-    if (!g_sc) {
-        plat_rmutex_unlock(&g_pl);
-        return;
-    }
     uint64_t val = __atomic_add_fetch(&g_reflex_val, 1, __ATOMIC_RELAXED);
     VkLatencySleepInfoNV si = {
         .sType = VK_STRUCTURE_TYPE_LATENCY_SLEEP_INFO_NV,
