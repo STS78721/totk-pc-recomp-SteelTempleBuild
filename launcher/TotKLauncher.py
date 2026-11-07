@@ -40,7 +40,7 @@ COLOR_TRACK_BG = "#263040"
 COLOR_TRACK_ACTIVE = "#ffd24d"
 
 GITHUB_URL = "https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild"
-VERSION_STRING = "Beta 5f"
+VERSION_STRING = "Beta 5g"
 RELEASES_API_URL = "https://api.github.com/repos/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest"
 MOD_DISABLED_SUFFIX = ".disabled"
 
@@ -841,6 +841,12 @@ class SonySettingsDialog(tk.Toplevel):
 
     def on_resolution_changed(self, _event=None):
         self.update_ultrawide_card()
+        res = self.vars["window_size"].get()
+        if not self.ultrawide_kind(res):
+            try:
+                restore_installed_ui_mods(GAME_DIR)
+            except Exception:
+                pass
 
     def apply_ultrawide_patch(self):
         resolution = self.vars["window_size"].get()
@@ -886,6 +892,16 @@ class SonySettingsDialog(tk.Toplevel):
                 detail = (result.stderr or result.stdout or "Patch tool failed without diagnostic output.").strip()
                 raise RuntimeError(detail[-1200:])
             message = f"Ultrawide {kind} HUD patch applied successfully!"
+            if "PATCHED_MODS=" in (result.stdout or ""):
+                try:
+                    for line in result.stdout.splitlines():
+                        if line.startswith("PATCHED_MODS="):
+                            cnt = int(line.split("=")[1].strip())
+                            if cnt > 0:
+                                message += f" (and adapted {cnt} UI mod(s))"
+                            break
+                except Exception:
+                    pass
             color = COLOR_ACCENT_GREEN
         except Exception as exc:
             message = f"Could not apply the HUD patch: {exc}"
@@ -1831,6 +1847,121 @@ Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
             messagebox.showinfo("Guide", "CONTROLLER_GUIDE.txt not found in game directory.")
 
 
+def patch_installed_ui_mods(game_dir, resolution, romfs_path=None):
+    """Scans game_dir/mods for any UI/prompt mods that bundle Common.Product.*.blarc.zs (or .blarc)
+    and patches their layout to match the target ultrawide resolution."""
+    mods_dir = Path(game_dir) / "mods"
+    if not mods_dir.is_dir():
+        return 0
+    if "x" not in resolution.lower():
+        return 0
+    try:
+        width, height = (int(v) for v in resolution.lower().split("x"))
+    except ValueError:
+        return 0
+    if abs(width / height - 16 / 9) < 0.01:
+        return 0
+    
+    romfs_dir = Path(romfs_path) if romfs_path else Path(game_dir) / "romfs"
+    index_path = romfs_dir / "index.json"
+    bin_path = romfs_dir / "romfs.bin"
+    if not index_path.is_file() or not bin_path.is_file():
+        return 0
+    
+    try:
+        import struct
+        import importlib.util
+        import compression.zstd as zstd
+        index_data = json.loads(index_path.read_text(encoding="utf-8"))
+        files = {f["path"]: f for f in index_data.get("files", [])}
+        if "Pack/ZsDic.pack.zs" not in files:
+            return 0
+        with bin_path.open("rb") as img:
+            f = files["Pack/ZsDic.pack.zs"]
+            img.seek(f["offset"])
+            pack_raw = img.read(f["size"])
+        pack = zstd.decompress(pack_raw)
+        
+        header, size, start = struct.unpack_from('<HxxII', pack, 4)
+        count = struct.unpack_from('<H', pack, header + 6)[0]
+        names = header + 12 + count * 16 + 8
+        dictionaries = {}
+        for i in range(count):
+            node = header + 12 + i * 16
+            _, attribute, lo, hi = struct.unpack_from('<4I', pack, node)
+            offset = names + (attribute & 0xffffff) * 4
+            d = zstd.ZstdDict(pack[start + lo:start + hi])
+            dictionaries[d.dict_id] = d
+    except Exception:
+        return 0
+
+    candidates = [
+        get_base_dir() / "tools" / "ultrawide_layout.py",
+        get_base_dir().parent / "tools" / "ultrawide_layout.py"
+    ]
+    tool = next((p for p in candidates if p.is_file()), None)
+    if not tool:
+        return 0
+    
+    try:
+        spec = importlib.util.spec_from_file_location("ultrawide_layout", tool)
+        ultrawide = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ultrawide)
+    except Exception:
+        return 0
+
+    patched_count = 0
+    for blarc_path in mods_dir.rglob("Common.Product.*.blarc.zs"):
+        if blarc_path.name.endswith(".bak_16_9"):
+            continue
+        try:
+            bak_path = blarc_path.with_name(blarc_path.name + ".bak_16_9")
+            if not bak_path.is_file():
+                bak_path.write_bytes(blarc_path.read_bytes())
+            
+            raw_to_patch = bak_path.read_bytes()
+            frame = zstd.get_frame_info(raw_to_patch)
+            d = dictionaries.get(frame.dictionary_id)
+            if not d:
+                continue
+            blarc_decomp = bytearray(zstd.decompress(raw_to_patch, zstd_dict=d))
+            
+            b_header, b_size, b_start = struct.unpack_from('<HxxII', blarc_decomp, 4)
+            b_count = struct.unpack_from('<H', blarc_decomp, b_header + 6)[0]
+            b_names = b_header + 12 + b_count * 16 + 8
+            members = {}
+            for i in range(b_count):
+                node = b_header + 12 + i * 16
+                _, attribute, lo, hi = struct.unpack_from('<4I', blarc_decomp, node)
+                offset = b_names + (attribute & 0xffffff) * 4
+                name = blarc_decomp[offset:blarc_decomp.index(0, offset, b_start)].decode()
+                members[name] = (b_start + lo, b_start + hi)
+            
+            ultrawide.apply(blarc_decomp, members, width, height)
+            recompressed = zstd.compress(blarc_decomp, level=19, zstd_dict=d)
+            blarc_path.write_bytes(recompressed)
+            patched_count += 1
+        except Exception:
+            continue
+    return patched_count
+
+
+def restore_installed_ui_mods(game_dir):
+    """Restores any backed-up 16:9 vanilla UI mod files if reverting to standard 16:9."""
+    mods_dir = Path(game_dir) / "mods"
+    if not mods_dir.is_dir():
+        return 0
+    restored = 0
+    for bak_path in mods_dir.rglob("*.bak_16_9"):
+        orig_path = bak_path.with_name(bak_path.name[:-9])
+        try:
+            orig_path.write_bytes(bak_path.read_bytes())
+            restored += 1
+        except Exception:
+            pass
+    return restored
+
+
 def main():
     if len(sys.argv) >= 6 and sys.argv[1] == "--run-ultrawide-patcher":
         resolution, version, romfs, out = sys.argv[2:6]
@@ -1841,6 +1972,11 @@ def main():
             raise FileNotFoundError("Bundled tools/make_romfs_patches.py was not found.")
         sys.argv = [str(tool), "--version", version, "--aspect", resolution, "--romfs", romfs, "--out", out]
         runpy.run_path(str(tool), run_name="__main__")
+        try:
+            cnt = patch_installed_ui_mods(GAME_DIR, resolution, romfs)
+            print(f"PATCHED_MODS={cnt}")
+        except Exception as exc:
+            print(f"PATCHED_MODS=0 (error: {exc})")
         return
 
     cfg = load_launcher_config()
