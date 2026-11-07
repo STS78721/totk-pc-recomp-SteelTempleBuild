@@ -22,7 +22,7 @@ from datetime import datetime
 from ctypes import wintypes
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk
 
 # --- Color Palette (Sony / Nixxes Inspired + Zonai Glow) ---
@@ -1100,23 +1100,168 @@ class SonySettingsDialog(tk.Toplevel):
 
 
 # --- Standalone 1-click Mod Manager ---
+def extract_mod_archive_to(archive_path, dest_dir):
+    archive_path = Path(archive_path)
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    suffix = archive_path.suffix.lower()
+
+    if suffix == '.zip':
+        with zipfile.ZipFile(archive_path, 'r') as z:
+            z.extractall(dest_dir)
+        return True, "Extracted with built-in zip engine."
+
+    unrar = Path(r"C:\Program Files\WinRAR\UnRAR.exe")
+    winrar = Path(r"C:\Program Files\WinRAR\WinRAR.exe")
+    sevenzip = Path(r"C:\Program Files\7-Zip\7z.exe")
+
+    dest_str = str(dest_dir)
+    if not dest_str.endswith('\\'):
+        dest_str += '\\'
+
+    if suffix == '.rar' and unrar.exists():
+        cmd = [str(unrar), "x", "-y", "-o+", str(archive_path), dest_str]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            return True, "Extracted with UnRAR."
+        return False, f"UnRAR returned error {res.returncode}: {res.stderr}"
+
+    if winrar.exists():
+        cmd = [str(winrar), "x", "-ibck", "-inul", "-y", "-o+", str(archive_path), dest_str]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            return True, "Extracted with WinRAR."
+        return False, f"WinRAR returned error {res.returncode}: {res.stderr}"
+
+    if sevenzip.exists():
+        cmd = [str(sevenzip), "x", "-y", f"-o{dest_dir}", str(archive_path)]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            return True, "Extracted with 7-Zip."
+        return False, f"7-Zip returned error {res.returncode}: {res.stderr}"
+
+    try:
+        shutil.unpack_archive(str(archive_path), str(dest_dir))
+        return True, "Extracted with standard unpacker."
+    except Exception as e:
+        return False, f"No supported extraction tool found for {suffix}: {e}"
+
+
+def normalize_extracted_mod_to(temp_dir, archive_name, mods_target_dir):
+    temp_dir = Path(temp_dir)
+    mods_target_dir = Path(mods_target_dir)
+    mods_target_dir.mkdir(parents=True, exist_ok=True)
+
+    entries = [p for p in temp_dir.iterdir() if p.name not in ('__MACOSX', '.DS_Store', 'Thumbs.db')]
+
+    # Check if single root directory
+    if len(entries) == 1 and entries[0].is_dir():
+        mod_name = entries[0].name
+        source_dir = entries[0]
+    else:
+        clean_name = archive_name
+        for s in ('.rar', '.zip', '.7z', '.tar', '.gz'):
+            if clean_name.lower().endswith(s):
+                clean_name = clean_name[:-len(s)]
+        mod_name = clean_name
+        source_dir = temp_dir
+
+    final_dest = mods_target_dir / mod_name
+    if final_dest.exists():
+        shutil.rmtree(final_dest)
+
+    shutil.copytree(source_dir, final_dest)
+
+    # Check for uppercase RomFS or romfslite and normalize
+    for p in final_dest.iterdir():
+        if p.is_dir() and p.name.lower() in ('romfs', 'romfslite') and p.name != 'romfs':
+            tmp_p = final_dest / "romfs_tmp_normalize"
+            p.rename(tmp_p)
+            tmp_p.rename(final_dest / "romfs")
+            break
+
+    # Clean loose README.txt from mods/ root if created
+    loose_readme = mods_target_dir / "README.txt"
+    if loose_readme.is_file():
+        try:
+            loose_readme.unlink()
+        except OSError:
+            pass
+
+    # Detect if 4K texture pack
+    is_4k = False
+    heapdef = final_dest / "romfs" / "System" / "HeapSize" / "Product.Nin_NX_NVN.HeapDef.byml.zs"
+    if heapdef.is_file():
+        is_4k = True
+    elif (final_dest / "romfs" / "TexToGo").is_dir():
+        is_4k = True
+
+    return mod_name, is_4k
+
+
+def ensure_4k_texture_pack_config(mod_name, game_dir=None):
+    game_path = Path(game_dir) if game_dir else GAME_DIR
+    ini_path = game_path / "totk.ini"
+    if not ini_path.is_file():
+        return
+    try:
+        text = ini_path.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()
+
+        new_lines = []
+        in_mods = False
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped == "[mods]":
+                in_mods = True
+                new_lines.append(line)
+                continue
+            elif stripped.startswith("[") and stripped.endswith("]"):
+                in_mods = False
+
+            if in_mods and (stripped.startswith("mods_order =") or stripped.startswith("# mods_order =")):
+                new_order = f"mods_order = PS5 UI - Default - Monochrome|{mod_name}|Pack"
+                new_lines.append(new_order)
+            else:
+                new_lines.append(line)
+
+        final_text = "\n".join(new_lines)
+        if "tex_heap_extra_mb = " not in final_text:
+            if "# tex_heap_extra_mb =" in final_text:
+                final_text = final_text.replace("# tex_heap_extra_mb =", "tex_heap_extra_mb = 1024\n# tex_heap_extra_mb =")
+            else:
+                final_text += "\ntex_heap_extra_mb = 1024\n"
+
+        ini_path.write_text(final_text, encoding="utf-8")
+    except Exception as exc:
+        print(f"Warning: could not update totk.ini for 4K pack: {exc}")
+
+
 class ModsManagerDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("TotK Mod Manager")
-        self.geometry("720x500")
-        self.minsize(600, 380)
+        self.geometry("780x520")
+        self.minsize(640, 400)
         self.configure(bg=COLOR_BG_DARK)
         self.transient(parent)
         self.parent_app = parent
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
-        header = tk.Frame(self, bg=COLOR_CARD, padx=22, pady=14)
+        header = tk.Frame(self, bg=COLOR_CARD, padx=22, pady=12)
         header.pack(fill=tk.X)
-        tk.Label(header, text="MOD MANAGER", font=("Segoe UI", 14, "bold"),
-                 fg=COLOR_GOLD, bg=COLOR_CARD).pack(anchor="w")
-        tk.Label(header, text="Toggle installed mods. Disabled folders are kept as <mod>.disabled.",
-                 font=("Segoe UI", 9), fg=COLOR_TEXT_DIM, bg=COLOR_CARD).pack(anchor="w", pady=(3, 0))
+        top_row = tk.Frame(header, bg=COLOR_CARD)
+        top_row.pack(fill=tk.X)
+        tk.Label(top_row, text="MOD MANAGER", font=("Segoe UI", 14, "bold"),
+                 fg=COLOR_GOLD, bg=COLOR_CARD).pack(side=tk.LEFT)
+        tk.Button(top_row, text="🌐  GET MODS (GAMEBANANA)",
+                  command=lambda: webbrowser.open("https://gamebanana.com/games/7617"),
+                  font=("Segoe UI", 8, "bold"), fg=COLOR_GOLD, bg=COLOR_CARD,
+                  activebackground=COLOR_BUTTON_HOVER, bd=1, relief="solid", highlightthickness=0,
+                  padx=10, pady=3, cursor="hand2").pack(side=tk.RIGHT)
+        tk.Label(header, text="Install archives, toggle mods, and manage load priority. Disabled folders are kept as <mod>.disabled.",
+                 font=("Segoe UI", 9), fg=COLOR_TEXT_DIM, bg=COLOR_CARD).pack(anchor="w", pady=(2, 0))
 
         list_frame = tk.Frame(self, bg=COLOR_BG_DARK)
         list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=14)
@@ -1130,15 +1275,18 @@ class ModsManagerDialog(tk.Toplevel):
         self.rows.bind("<Configure>", lambda _e: self.list_canvas.configure(scrollregion=self.list_canvas.bbox("all")))
         self.list_canvas.bind("<Configure>", lambda e: self.list_canvas.itemconfigure(self.rows_window, width=e.width))
 
-        footer = tk.Frame(self, bg=COLOR_CARD, height=62, padx=18)
+        footer = tk.Frame(self, bg=COLOR_CARD, height=64, padx=16)
         footer.pack(fill=tk.X, side=tk.BOTTOM)
         footer.pack_propagate(False)
-        tk.Button(footer, text="OPEN MODS FOLDER", command=self.open_mods_folder,
+        tk.Button(footer, text="📦  INSTALL MOD ARCHIVE (.ZIP / .RAR / .7Z)", command=self.install_mod_archive,
                   font=("Segoe UI", 9, "bold"), fg="#000000", bg=COLOR_GOLD,
                   activebackground=COLOR_GOLD_HOVER, bd=0, padx=14, pady=8, cursor="hand2").pack(side=tk.LEFT, pady=12)
+        tk.Button(footer, text="OPEN MODS FOLDER", command=self.open_mods_folder,
+                  font=("Segoe UI", 9, "bold"), fg=COLOR_WHITE, bg=COLOR_BUTTON_HOVER,
+                  activebackground=COLOR_GOLD, bd=0, padx=12, pady=8, cursor="hand2").pack(side=tk.LEFT, padx=8, pady=12)
         tk.Button(footer, text="REFRESH", command=self.refresh,
                   font=("Segoe UI", 9, "bold"), fg=COLOR_WHITE, bg=COLOR_BUTTON_HOVER,
-                  activebackground=COLOR_GOLD, bd=0, padx=14, pady=8, cursor="hand2").pack(side=tk.LEFT, padx=10, pady=12)
+                  activebackground=COLOR_GOLD, bd=0, padx=12, pady=8, cursor="hand2").pack(side=tk.LEFT, pady=12)
         tk.Button(footer, text="CLOSE", command=self.destroy,
                   font=("Segoe UI", 9, "bold"), fg=COLOR_WHITE, bg=COLOR_BUTTON_HOVER,
                   activebackground=COLOR_GOLD, bd=0, padx=14, pady=8, cursor="hand2").pack(side=tk.RIGHT, pady=12)
@@ -1148,6 +1296,46 @@ class ModsManagerDialog(tk.Toplevel):
                         if item["device"] == parent.launcher_cfg.get("target_display")), None)
         if monitor:
             place_window_on_monitor(self, monitor)
+
+    def install_mod_archive(self):
+        archive_path = filedialog.askopenfilename(
+            parent=self,
+            title="Select Mod Archive (*.zip, *.rar, *.7z)",
+            filetypes=[
+                ("Supported Archives (*.zip, *.rar, *.7z)", "*.zip *.rar *.7z *.tar *.gz"),
+                ("ZIP Archives", "*.zip"),
+                ("RAR Archives", "*.rar"),
+                ("7-Zip Archives", "*.7z"),
+                ("All Files", "*.*")
+            ]
+        )
+        if not archive_path:
+            return
+
+        archive_file = Path(archive_path)
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                ok, msg = extract_mod_archive_to(archive_file, temp_path)
+                if not ok:
+                    messagebox.showerror("Installation Failed", f"Could not extract archive:\n{msg}", parent=self)
+                    return
+
+                mod_name, is_4k = normalize_extracted_mod_to(temp_path, archive_file.name, MODS_DIR)
+
+                if is_4k:
+                    ensure_4k_texture_pack_config(mod_name)
+
+            if hasattr(self.parent_app, 'play_sound'):
+                self.parent_app.play_sound('nav_next')
+
+            self.refresh()
+            info_txt = f"Mod '{mod_name}' was successfully installed and enabled!"
+            if is_4k:
+                info_txt += "\n\n🌟 Detected 4K Texture Pack! Configured load priority and expanded texture memory heap in totk.ini."
+            messagebox.showinfo("Mod Installed Successfully", info_txt, parent=self)
+        except Exception as exc:
+            messagebox.showerror("Installation Error", f"Failed to install mod:\n{str(exc)}", parent=self)
 
     def refresh(self):
         for child in self.rows.winfo_children():
@@ -1820,6 +2008,8 @@ Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
         menu.add_command(label="🌐  Visit GitHub Repository", command=lambda: webbrowser.open(GITHUB_URL))
         menu.add_command(label="⬆  Check for Updates", command=self.check_for_updates)
         menu.add_command(label="🧩  Open Mod Manager", command=self.open_mod_manager)
+        menu.add_command(label="📦  Install Mod Archive (.zip / .rar / .7z)", command=self.quick_install_mod_archive)
+        menu.add_command(label="🌐  Browse Mods (GameBanana)", command=lambda: webbrowser.open("https://gamebanana.com/games/7617"))
         menu.add_command(label="🛡  Save Backup Vault", command=self.open_save_backup_vault)
         menu.add_separator()
         menu.add_command(label="📁  Open Mods Folder (mods/)", command=lambda: open_dir("mods", "Mods"))
@@ -1832,6 +2022,10 @@ Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 
     def open_mod_manager(self):
         ModsManagerDialog(self)
+
+    def quick_install_mod_archive(self):
+        dlg = ModsManagerDialog(self)
+        dlg.install_mod_archive()
 
     def open_save_backup_vault(self):
         SaveBackupVaultDialog(self)
