@@ -10,6 +10,33 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 
 ---
 
+## [Beta 5f] - 2026-11-07
+
+### ⚡ Upstream v0.3.12 Engine Sync
+- **Dynamic State Delta Recording:** Command buffer now tracks and records only states that changed since previous draws (`dyn_delta`), slashing command queue overhead and CPU draw time.
+- **Inter-Pass Uniform Overlays:** Uniform updates between passes are batched as scratch overlays, eliminating redundant pipeline barriers.
+- **HD Texture Pack Support:** Expanded texture heap via `tex_heap_extra_mb` preventing out-of-memory crashes on large 4K community texture packs (e.g. *The Second Quest*).
+- **VRAM Pressure Auto-Management:** Released textures overwritten by newer assets are safely evicted when VRAM usage crosses threshold (`tex_vram_pressure`), preventing GPU paging stutter.
+- **Ultra-Smooth Frame Queue:** Optional display-time image queue (`FRAME_QUEUE=1`) eliminating frame drops at target limits.
+- **Native Direct Mouse Controls & In-Game Menu Pointer:** Full camera mouse control with native aim distance restoration, menu cursor support, and scroll wheel map zoom.
+- **Movie Aspect Ratio Preservation:** Pre-rendered cutscenes maintain correct picture shape without stretching on non-16:9 displays.
+- **Driver-Level Crash Diagnostics:** Crash reports now display driver stack frames, C++ exception types, and host function signatures.
+
+### 🚀 Upstream Parity NVIDIA Reflex (`VK_NV_low_latency2`)
+- **Full Upstream Merge Validation (PR #638):** Fully rebased and compliant with official upstream review requirements.
+- **Clean Restarts & Fallbacks:** Gated cleanly on `reflex != off` as a `RESTART` setting, preserving vanilla device/swapchain paths for non-Reflex players.
+- **Graceful Unsupported Hardware Handling:** Explicitly logs non-NVIDIA GPU fallback notice (`Reflex: VK_NV_low_latency2 not available`) with zero validation errors.
+- **Multilingual Support:** Complete translations in English, Russian, Brazilian Portuguese, and Simplified Chinese.
+
+### 📦 Standalone Distribution & Packaging
+- **Streamlined Distribution Architecture:**
+  - `SteelTemple-TotK-Beta5f-Portable-StandAlone.zip` (~505 MB) — Complete standalone zero-install environment.
+  - `SteelTemple-TotK-Beta5f-Update.zip` (~117 MB) — Drop-in delta update preserving existing player configurations.
+  - `SteelTemple-TotK-Beta5f-Full-Setup-Wizard.exe` (~64 MB) — Interactive installer with 1-click Desktop shortcut creation.
+- **ExeFS Startup Integrity Protection:** `TotKLauncher.exe` pre-flight dialog prevents silent launch crashes if `exefs/` or `romfs/` are missing.
+
+---
+
 ## [Beta 5e Hotfix] - 2026-11-05
 
 ### 🎮 In-Game Overlay & Controller Features
