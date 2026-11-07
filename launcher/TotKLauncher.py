@@ -40,7 +40,7 @@ COLOR_TRACK_BG = "#263040"
 COLOR_TRACK_ACTIVE = "#ffd24d"
 
 GITHUB_URL = "https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild"
-VERSION_STRING = "Beta 5g"
+VERSION_STRING = "Beta 5h"
 RELEASES_API_URL = "https://api.github.com/repos/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest"
 MOD_DISABLED_SUFFIX = ".disabled"
 
