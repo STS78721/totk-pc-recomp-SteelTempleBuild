@@ -10,6 +10,18 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 
 ---
 
+## [Beta 5g] - 2026-11-07
+
+### 🖥️ Synchronous Borderless Fullscreen Startup (Engine Fix)
+- **Swapchain Race Condition Elimination:** Window creation now applies `WS_POPUP` borderless styling and physical monitor bounds (`rcMonitor`) synchronously *before* signaling surface acquisition. The Vulkan swapchain captures exact physical display dimensions on the first pass, preventing stretching or manual F11 toggle requirements on ultrawide displays (3440×1440, 2560×1080).
+
+### 🎮 Ultrawide HUD Auto-Patcher for Custom UI & Controller Prompt Mods
+- **Mod Layout Precedence Support:** Automatically detects when button prompt mods (e.g. PSX / DualSense / Xbox prompt mods) in `GAME/mods/` shadow the ultrawide HUD layout.
+- **In-Place Ultrawide Mod Transformation:** Decompresses mod `Common.Product.*.blarc.zs` archives, transforms layout coordinates to matching ultrawide aspect ratios, and recompresses them—retaining 100% of custom button prompt textures while adapting the UI geometry to ultrawide!
+- **Safe Revert Architecture:** Creates automatic `.bak_16_9` backups and automatically restores pristine 16:9 layouts if standard resolutions are selected.
+
+---
+
 ## [Beta 5f] - 2026-11-07
 
 ### ⚡ Upstream v0.3.12 Engine Sync
