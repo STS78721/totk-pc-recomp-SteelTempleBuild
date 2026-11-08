@@ -1474,7 +1474,16 @@ void *plat_lib_open(const char *name) {
     wchar_t w[WPATH];
     if (!widen(name, w, WPATH)) return NULL;
     int bare = !wcschr(w, L'\\') && !wcschr(w, L'/');
-    return (void *)LoadLibraryExW(w, NULL, bare ? LOAD_LIBRARY_SEARCH_SYSTEM32 : 0);
+    HMODULE m = LoadLibraryExW(w, NULL, bare ? LOAD_LIBRARY_SEARCH_SYSTEM32 : 0);
+    if (!m && bare) m = LoadLibraryW(w);
+    return (void *)m;
+}
+
+void *plat_lib_open_wide(const wchar_t *wpath) {
+    if (!wpath || !wpath[0]) return NULL;
+    HMODULE m = LoadLibraryExW(wpath, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!m) m = LoadLibraryW(wpath);
+    return (void *)m;
 }
 
 void *plat_lib_sym(void *lib, const char *name) { return lib ? (void *)GetProcAddress((HMODULE)lib, name) : NULL; }
@@ -1482,6 +1491,22 @@ void *plat_lib_sym(void *lib, const char *name) { return lib ? (void *)GetProcAd
 void plat_lib_error(char *out, size_t cap) { snprintf(out, cap, "error %lu", GetLastError()); }
 
 int plat_ngx_core_path(char *out, size_t cap) {
+    // Check game directory first for local proxy (_nvngx.dll or nvngx.dll from OptiScaler / DLSS-5-MANAGER)
+    wchar_t edir[WPATH];
+    if (plat_exe_dir_wide(edir, WPATH)) {
+        char ed[PLAT_PATH_MAX];
+        if (WideCharToMultiByte(CP_UTF8, 0, edir, -1, ed, (int)sizeof ed, NULL, NULL)) {
+            char local_proxy[PLAT_PATH_MAX];
+            snprintf(local_proxy, sizeof local_proxy, "%s_nvngx.dll", ed);
+            DWORD a = GetFileAttributesA(local_proxy);
+            if (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY))
+                return snprintf(out, cap, "%s", local_proxy) < (int)cap;
+            snprintf(local_proxy, sizeof local_proxy, "%snvngx.dll", ed);
+            a = GetFileAttributesA(local_proxy);
+            if (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY))
+                return snprintf(out, cap, "%s", local_proxy) < (int)cap;
+        }
+    }
     wchar_t dir[WPATH];
     DWORD n = sizeof dir;
     char d[PLAT_PATH_MAX];

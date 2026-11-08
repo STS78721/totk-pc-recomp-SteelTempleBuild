@@ -214,6 +214,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_DLSS_NR_PRESET] = "Neural Rendering Preset",
     [UI_MENU_DLSS_NR_PRESET_DESC] = "Operational model profile. Preset B is forced by default for vastly superior "
                                     "frame rates and minimal latency overhead compared to older models.",
+    [UI_MENU_DLSS_NR_PASSES] = "Multipass System",
+    [UI_MENU_DLSS_NR_PASSES_DESC] = "Runs multiple sequential neural rendering passes before Super Resolution upscaling (OptiScaler Pre-SR Multipass).",
     [UI_MENU_DLSS_NR_SCALE] = "Neural Working Scale",
     [UI_MENU_DLSS_NR_SCALE_DESC] = "Controls internal resolution scale at which the neural model operates (OptiScaler WorkingScale). "
                                    "Performance cost scales with the square of this value; 0.5-0.75 gives huge FPS boosts.",

@@ -168,6 +168,7 @@ int vk_gpu_is_intel(void);
 int vk_gpu_is_intel_arc(void);
 int vk_has_amd_antilag(void);
 int vk_fg_active_multiplier(void);
+int vk_fg_history_valid(void);
 void vk_fsr_release(void);   // before the device goes away
 // Colour adjustment on the present (vk_color.c): with TOTK_COLOR_* away from their defaults, records a pass that writes
 // src's crop rectangle {x, y, w, h}, adjusted, into an RGBA16F image of that size in GENERAL and returns it (the caller

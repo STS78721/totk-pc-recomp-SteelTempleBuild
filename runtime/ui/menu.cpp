@@ -987,6 +987,17 @@ static void tab_dlss_nr(float scale) {
     if (!can_enable) opt_disable_next_text(dis_note);
     opt_choice_list("TOTK_DLSS_NR_PRESET", UI_MENU_DLSS_NR_PRESET, nr_preset_vals, nr_preset_names, 3, UI_MENU_DLSS_NR_PRESET_DESC);
 
+    static const char *const passes_vals[] = {"1", "2", "3", "4"};
+    static const char *const passes_names[] = {
+        "1x Pass (Standard Pre-SR Neural Pass - Recommended)",
+        "2x Passes (Dual Sequential AI Passes)",
+        "3x Passes (Triple Sequential AI Passes)",
+        "4x Passes (Quad Sequential AI Passes - Extreme Fidelity)"
+    };
+    if (!can_enable) opt_disable_next_text(dis_note);
+    opt_choice_list("TOTK_DLSS_NR_PASSES", UI_MENU_DLSS_NR_PASSES, passes_vals, passes_names, 4,
+                    UI_MENU_DLSS_NR_PASSES_DESC);
+
     static const char *const scale_vals[] = {"auto", "1.0", "0.85", "0.75", "0.5"};
     static const char *const scale_names[] = {
         "Auto (Native Working Resolution)",

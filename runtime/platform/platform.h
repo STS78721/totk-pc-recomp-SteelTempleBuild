@@ -392,6 +392,7 @@ int plat_open_folder(const char *path);                   // shows the folder in
 // ---- dynamic libraries: a library some machines lack (a GPU vendor's), loaded at run time. A bare name is searched
 // in the system directories only. NULL when missing.
 void *plat_lib_open(const char *name);
+void *plat_lib_open_wide(const wchar_t *wpath);
 void *plat_lib_sym(void *lib, const char *name);
 // Why the calling thread's last plat_lib_open failed, for a log line (the OS error code on Windows, dlerror on Linux).
 void plat_lib_error(char *out, size_t cap);

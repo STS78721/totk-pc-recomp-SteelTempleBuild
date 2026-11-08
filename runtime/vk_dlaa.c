@@ -30,6 +30,8 @@ typedef int NgxResult;   // NVSDK_NGX_Result: 1 success, 0xBAD00000 | n failures
 #define NGX_OK(r) (((unsigned)(r) & 0xFFF00000u) != 0xBAD00000u)
 #define NGX_VERSION_API 0x15
 #define NGX_FEATURE_SUPERSAMPLING 1
+#define NGX_FEATURE_RAYRECONSTRUCTION 13
+#define NGX_FEATURE_NEURAL_RENDERING 18
 #define NGX_PERFQ_DLAA 5   // NVSDK_NGX_PerfQuality_Value: 0 performance, 1 balanced, 2 quality, 3 ultra performance
 typedef struct NgxParam NgxParam;
 typedef struct NgxHandle NgxHandle;
@@ -69,6 +71,15 @@ static struct {
     int tried, loaded, available;
     int wanted;   // -1 not read yet
 } N = {.wanted = -1};
+
+static struct {
+    void *lib;           // nvngx_dlssnr.dll or UltraCamVk.nvngx.dll handle
+    PFN_Init init;
+    PFN_Create create;
+    PFN_Evaluate evaluate;
+    PFN_Release release;
+    int tried, loaded, inited;
+} NR;
 
 typedef void (*SetI)(NgxParam *, const char *, int);
 typedef void (*SetU)(NgxParam *, const char *, unsigned);
@@ -188,6 +199,85 @@ static int vtable_ok(void) {
     return ok;
 }
 
+static void nr_load_and_init(const VkCtx *c, const wchar_t *wdir) {
+    if (NR.tried) return;
+    NR.tried = 1;
+
+    wchar_t snip_path[PLAT_PATH_MAX];
+    wchar_t uc_path[PLAT_PATH_MAX];
+    snip_path[0] = L'\0';
+    uc_path[0] = L'\0';
+    if (plat_exe_dir_wide(snip_path, PLAT_PATH_MAX)) {
+        size_t len = wcslen(snip_path);
+        if (len > 0 && snip_path[len - 1] != L'\\' && snip_path[len - 1] != L'/') {
+            snip_path[len++] = L'\\';
+            snip_path[len] = L'\0';
+        }
+        wcscpy(uc_path, snip_path);
+        wcscat(snip_path, L"nvngx_dlssnr.dll");
+        wcscat(uc_path, L"UltraCamVk.nvngx.dll");
+    }
+
+    // Attempt 1: UltraCamVk.nvngx forwarder bridge (proven snippet forwarder)
+    void *uc = uc_path[0] ? plat_lib_open_wide(uc_path) : plat_lib_open("UltraCamVk.nvngx.dll");
+    if (uc) {
+        typedef int (*PFN_UcLoad)(const wchar_t *, unsigned *);
+        PFN_UcLoad uc_load = (PFN_UcLoad)plat_lib_sym(uc, "UcNgxLoad");
+        PFN_Init uc_init = (PFN_Init)plat_lib_sym(uc, "UcNgxInit");
+        PFN_Create uc_create = (PFN_Create)plat_lib_sym(uc, "UcNgxCreate");
+        PFN_Evaluate uc_eval = (PFN_Evaluate)plat_lib_sym(uc, "UcNgxEvaluate");
+        PFN_Release uc_rel = (PFN_Release)plat_lib_sym(uc, "UcNgxRelease");
+        if (uc_load && uc_init && uc_create && uc_eval && uc_rel) {
+            unsigned err = 0;
+            const wchar_t *target = snip_path[0] ? snip_path : L"nvngx_dlssnr.dll";
+            int mask = uc_load(target, &err);
+            if ((mask & 0x1f) == 0x1f) {
+                NgxResult r = uc_init(0, wdir, c->instance, c->phys, c->device,
+                                      vkGetInstanceProcAddr, vkGetDeviceProcAddr, NGX_VERSION_API, NULL);
+                if (NGX_OK(r)) {
+                    NR.lib = uc;
+                    NR.init = uc_init;
+                    NR.create = uc_create;
+                    NR.evaluate = uc_eval;
+                    NR.release = uc_rel;
+                    NR.loaded = 1;
+                    NR.inited = 1;
+                    rt_log("dlaa: DLSS-NR neural forwarder online via UltraCamVk.nvngx.dll (mask 0x%02x)", mask);
+                    return;
+                } else {
+                    rt_log("dlaa: DLSS-NR forwarder UcNgxInit failed (%08x)", (unsigned)r);
+                }
+            } else {
+                rt_log("dlaa: DLSS-NR forwarder UcNgxLoad returned mask 0x%02x err 0x%x", mask, err);
+            }
+        }
+    }
+
+    // Attempt 2: Direct nvngx_dlssnr.dll Vulkan NGX exports
+    void *snip = snip_path[0] ? plat_lib_open_wide(snip_path) : plat_lib_open("nvngx_dlssnr.dll");
+    if (snip) {
+        NR.init = (PFN_Init)plat_lib_sym(snip, "NVSDK_NGX_VULKAN_Init_Ext2");
+        NR.create = (PFN_Create)plat_lib_sym(snip, "NVSDK_NGX_VULKAN_CreateFeature");
+        NR.evaluate = (PFN_Evaluate)plat_lib_sym(snip, "NVSDK_NGX_VULKAN_EvaluateFeature");
+        NR.release = (PFN_Release)plat_lib_sym(snip, "NVSDK_NGX_VULKAN_ReleaseFeature");
+        if (NR.init && NR.create && NR.evaluate && NR.release) {
+            NgxResult r = NR.init(0, wdir, c->instance, c->phys, c->device,
+                                  vkGetInstanceProcAddr, vkGetDeviceProcAddr, NGX_VERSION_API, NULL);
+            if (NGX_OK(r)) {
+                NR.lib = snip;
+                NR.loaded = 1;
+                NR.inited = 1;
+                rt_log("dlaa: DLSS-NR direct neural snippet online (nvngx_dlssnr.dll)");
+                return;
+            } else {
+                rt_log("dlaa: DLSS-NR direct Init_Ext2 returned %08x", (unsigned)r);
+            }
+        }
+    } else {
+        rt_log("dlaa: nvngx_dlssnr.dll not found in executable directory; DLSS-NR unavailable");
+    }
+}
+
 void vk_dlaa_init(void) {
     if (!vk_dlaa_wanted() || !core_load()) return;
     // The executable's folder, where NGX looks for the DLSS model library and writes its logs.
@@ -214,6 +304,7 @@ void vk_dlaa_init(void) {
     N.available = avail != 0;
     rt_log("dlaa: NGX up; DLSS %s%s", avail ? "available" : "NOT available (is " DLSS_MODEL " next to the executable?)",
            driver ? "; the driver needs an update" : "");
+    nr_load_and_init(c, wdir);
 }
 
 int vk_dlaa_available(void) { return vk_dlaa_wanted() && N.available; }
@@ -245,20 +336,22 @@ static struct {
     int ended, up;               // this frame: the scene is drawn (jitter over), DLSS wrote the scaled output
     struct Size {                // a DLSS feature and its work images per scene size (dynamic resolution flips it)
         uint32_t w, h, ow, oh;   // render size, output size
-        VkImage out, mv;
-        VmaAllocation out_mem, mv_mem;
-        VkImageView out_view, mv_view;
+        VkImage out, mv, nr_out;
+        VmaAllocation out_mem, mv_mem, nr_out_mem;
+        VkImageView out_view, mv_view, nr_out_view;
         VkImage mask, chars[2];  // the bias mask DLSS reads, the character class mask of this and last frame (R8)
         VmaAllocation mask_mem, chars_mem[2];
         VkImageView mask_view, chars_view[2];
         int chars_cur, chars_ok; // chars[chars_cur] is written next; chars_ok: the other holds last frame's
-        NgxHandle *feat;
+        NgxHandle *feat, *nr_feat;
+        int feat_type;
         uint64_t used;           // evals count when it last ran
     } sizes[5], *last;           // last: the one the previous DLAA frame ran with
     VkImage last_color;          // the target DLAA ran on last frame: another one means a new history
     NgxParam *params;
     int failed, reset;
-    uint64_t evals, frames_missed;
+    uint64_t evals, nr_evals, frames_missed;
+    int last_is_nr;
     // jitter (vk_dlaa_viewport)
     VkImage jdepth;              // the scene depth of the last frame DLAA ran on: passes drawing with it are jittered
     float jx, jy;                // the offset the next scene draws take, render pixels (window x right, y down)
@@ -323,13 +416,22 @@ static void free_size(struct Size *e) {
     if (e->mv_view) vkDestroyImageView(c->device, e->mv_view, NULL);
     if (e->out) vmaDestroyImage(c->vma, e->out, e->out_mem);
     if (e->mv) vmaDestroyImage(c->vma, e->mv, e->mv_mem);
+    if (e->nr_out_view) vkDestroyImageView(c->device, e->nr_out_view, NULL);
+    if (e->nr_out) vmaDestroyImage(c->vma, e->nr_out, e->nr_out_mem);
     if (e->mask_view) vkDestroyImageView(c->device, e->mask_view, NULL);
     if (e->mask) vmaDestroyImage(c->vma, e->mask, e->mask_mem);
     for (int i = 0; i < 2; i++) {
         if (e->chars_view[i]) vkDestroyImageView(c->device, e->chars_view[i], NULL);
         if (e->chars[i]) vmaDestroyImage(c->vma, e->chars[i], e->chars_mem[i]);
     }
-    if (e->feat) N.release(e->feat);
+    if (e->feat) {
+        if (N.release) N.release(e->feat);
+        e->feat = NULL;
+    }
+    if (e->nr_feat) {
+        if (NR.release) NR.release(e->nr_feat);
+        e->nr_feat = NULL;
+    }
     memset(e, 0, sizeof *e);
 }
 
@@ -352,14 +454,15 @@ static struct Size *size_for(VkCommandBuffer cb, uint32_t w, uint32_t h, uint32_
                           VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     VkImageUsageFlags u8 = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     if (!image2d(ow, oh, VK_FORMAT_R16G16B16A16_SFLOAT, u, &e->out, &e->out_mem, &e->out_view) ||
+        !image2d(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, u, &e->nr_out, &e->nr_out_mem, &e->nr_out_view) ||
         !image2d(w, h, VK_FORMAT_R16G16_SFLOAT, u | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &e->mv, &e->mv_mem, &e->mv_view) ||
         !image2d(w, h, VK_FORMAT_R8_UNORM, u8, &e->mask, &e->mask_mem, &e->mask_view) ||
         !image2d(w, h, VK_FORMAT_R8_UNORM, u8, &e->chars[0], &e->chars_mem[0], &e->chars_view[0]) ||
         !image2d(w, h, VK_FORMAT_R8_UNORM, u8, &e->chars[1], &e->chars_mem[1], &e->chars_view[1]))
         return NULL;
-    VkImageMemoryBarrier2 ib[5];
-    VkImage im[5] = {e->out, e->mv, e->mask, e->chars[0], e->chars[1]};
-    for (int i = 0; i < 5; i++)
+    VkImageMemoryBarrier2 ib[6];
+    VkImage im[6] = {e->out, e->nr_out, e->mv, e->mask, e->chars[0], e->chars[1]};
+    for (int i = 0; i < 6; i++)
         ib[i] = (VkImageMemoryBarrier2){.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                                         .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                         .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
@@ -368,7 +471,7 @@ static struct Size *size_for(VkCommandBuffer cb, uint32_t w, uint32_t h, uint32_
                                         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = im[i],
                                         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 5,
+    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 6,
                            .pImageMemoryBarriers = ib};
     vkCmdPipelineBarrier2(cb, &di);
     e->w = w, e->h = h, e->ow = ow, e->oh = oh;
@@ -830,6 +933,7 @@ static float halton(uint32_t i, uint32_t b) {
 }
 
 void vk_dlaa_viewport(VkExec *ex, VkViewport *v) {
+    if (cfg_bool("TOTK_DLSS_NR")) return;   // DLSS-NR operates without camera jitter; viewport jitter causes shadow flickering
     if (!D.jit_ok || D.ended || !ex->depth.image || ex->depth.image != D.jdepth) return;
     v->x += D.jx, v->y += D.jy;
     D.ux = D.jx, D.uy = D.jy, D.jit_used = 1;
@@ -882,6 +986,11 @@ void vk_dlaa_draw(VkExec *ex) {
 static void next_jitter(uint32_t w, uint32_t ow) {
     static int nj = -1;
     if (nj < 0) nj = !rt_knob("DLAA_JITTER", "1");   // TOTK_DLAA_JITTER=0: no jitter (test)
+    if (cfg_bool("TOTK_DLSS_NR")) {
+        D.jx = D.jy = 0.0f;
+        D.jit_ok = 0;
+        return;
+    }
     double r = w ? (double)ow / w : 1.0;
     uint32_t phases = (uint32_t)ceil(8.0 * r * r - 1e-6);
     if (phases < 16) phases = 16;
@@ -943,7 +1052,8 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     NgxParam *p = D.params;
     VkImageView zv = vk_exec_target_view(z->img, z->format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT, z->level,
                                          z->base_layer, 1, 0);
-    float jx = D.jit_used ? D.ux : 0.0f, jy = D.jit_used ? D.uy : 0.0f;
+    int is_nr = cfg_bool("TOTK_DLSS_NR");
+    float jx = (D.jit_used && !is_nr) ? D.ux : 0.0f, jy = (D.jit_used && !is_nr) ? D.uy : 0.0f;
     static int no_mv = -1;
     if (no_mv < 0) no_mv = !rt_knob("DLAA_MV", "1");   // TOTK_DLAA_MV=0: zero motion (test)
     int masked = 0;
@@ -962,6 +1072,51 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     uint64_t c0 = timed ? kern_now_ns() : 0;
     rec_drain();   // NGX records into the command buffer itself: the recorder thread must have made every call so far
     if (timed) T.cpu_drain += kern_now_ns() - c0;
+    is_nr = cfg_bool("TOTK_DLSS_NR");
+    static char last_nr_preset[16] = "";
+    const char *nr_p = cfg_value("TOTK_DLSS_NR_PRESET");
+    if (is_nr != D.last_is_nr || strcmp(nr_p, last_nr_preset)) {
+        snprintf(last_nr_preset, sizeof last_nr_preset, "%s", nr_p);
+        if (e->feat) {
+            if (N.release) N.release(e->feat);
+            e->feat = NULL;
+        }
+        if (e->nr_feat) {
+            if (NR.release) NR.release(e->nr_feat);
+            e->nr_feat = NULL;
+        }
+        D.last_is_nr = is_nr;
+        D.failed = 0;
+    }
+    if (is_nr && NR.loaded && NR.inited && !e->nr_feat) {
+        int nr_preset_id = (!strcmp(nr_p, "preset_a")) ? 1 : 2; // Default Preset B = 2
+        p_setu(p, "CreationNodeMask", 1);
+        p_setu(p, "VisibilityNodeMask", 1);
+        p_setu(p, "DLSSNR.Width", w);
+        p_setu(p, "DLSSNR.Height", h);
+        p_setu(p, "Width", w);
+        p_setu(p, "Height", h);
+        p_setu(p, "OutWidth", w);
+        p_setu(p, "OutHeight", h);
+        p_setu(p, "DLSSNR.Hint.Render.Preset", (unsigned)nr_preset_id);
+        p_setu(p, "DLSSNR.UICorrection", 1);
+        p_setf(p, "DLSSNR.Intensity", 1.0f);
+        p_setu(p, "DLSSNR.Style", 0);
+        p_setf(p, "DLSSNR.LocalStructureStrength", 0.8f);
+        p_setf(p, "DLSSNR.LocalToneStrength", 0.5f);
+        p_setf(p, "DLSSNR.SkinStructureStrength", 0.5f);
+        p_setu(p, "DLSSNR.UseAutoMask", 1);
+        p_setu(p, "DLSSNR.Enabled", 1);
+
+        NgxResult r = NR.create(cb, NGX_FEATURE_NEURAL_RENDERING, p, &e->nr_feat);
+        if (NGX_OK(r) && e->nr_feat) {
+            rt_log("dlaa: DLSS-NR Preset %c Neural Rendering feature ACTIVE (feat_id=18) at %ux%u (Pre-SR Multipass)",
+                   nr_preset_id == 1 ? 'A' : 'B', w, h);
+        } else {
+            rt_log("dlaa: DLSS-NR CreateFeature failed (code %08x); continuing with SuperSampling only", (unsigned)r);
+            e->nr_feat = NULL;
+        }
+    }
     if (!e->feat) {
         p_setu(p, "CreationNodeMask", 1);
         p_setu(p, "VisibilityNodeMask", 1);
@@ -984,19 +1139,93 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
         p_setu(p, "DLSS.Hint.Render.Preset.Balanced", (unsigned)pk);
         p_setu(p, "DLSS.Hint.Render.Preset.Performance", (unsigned)pm);
         p_setu(p, "DLSS.Hint.Render.Preset.UltraPerformance", (unsigned)pl);
+
         NgxResult r = N.create(cb, NGX_FEATURE_SUPERSAMPLING, p, &e->feat);
-        if (!NGX_OK(r) || !e->feat) return dl_fail("DLSS feature creation", r);
-        D.reset = 1;
+        if (!NGX_OK(r) || !e->feat) {
+            D.up = 0;
+            return dl_fail("DLSS feature creation", r);
+        }
         int q = perf_quality(w, ow), pr = q == 0 ? pm : q == 3 ? pl : pk;
-        rt_log("dlaa: DLSS feature created at %ux%u -> %ux%u, quality value %d, preset %c (scene format %d, depth format "
-               "%d)", w, h, ow, oh, q, 'A' + pr - 1, (int)t->format, (int)z->format);
+        rt_log("dlaa: DLSS SuperSampling feature created (feat_id=1) at %ux%u -> %ux%u, quality value %d, preset %c (scene format %d, depth format %d)",
+               w, h, ow, oh, q, 'A' + pr - 1, (int)t->format, (int)z->format);
     }
     if (D.last_color != t->image) D.reset = 1, D.why[2]++, D.last_color = t->image;
     NgxResourceVK rc = res_image(cv, t->image, t->format, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
     NgxResourceVK ro = res_image(e->out_view, e->out, VK_FORMAT_R16G16B16A16_SFLOAT, ow, oh, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    NgxResourceVK r_nr_out = res_image(e->nr_out_view, e->nr_out, VK_FORMAT_R16G16B16A16_SFLOAT, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     NgxResourceVK rz = res_image(zv, z->image, z->format, w, h, VK_IMAGE_ASPECT_DEPTH_BIT, 0);
     NgxResourceVK rm = res_image(e->mv_view, e->mv, VK_FORMAT_R16G16_SFLOAT, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
-    p_setp(p, "Color", &rc);
+
+    // The time since the previous evaluation, which DLSS weighs its history by
+    uint64_t now = plat_now_ns();
+    double dt = D.last_eval_ns ? (now - D.last_eval_ns) / 1e6 : 0;
+    D.last_eval_ns = now;
+    p_setf(p, "FrameTimeDeltaInMsec", dt > 0 && dt < 100 ? (float)dt : 16.67f);
+    c0 = timed ? kern_now_ns() : 0;
+
+    // Stage 1: Pre-SR DLSS-NR Multipass (runs 1:1 at w x h into e->nr_out)
+    int nr_active = (is_nr && e->nr_feat && NR.evaluate);
+    if (nr_active) {
+        int passes = 1;
+        const char *ps = cfg_get("TOTK_DLSS_NR_PASSES");
+        if (ps && *ps >= '1' && *ps <= '4') passes = *ps - '0';
+
+        p_seti(p, "DLSSNR.Enabled", 1);
+        p_setu(p, "DLSSNR.Width", w);
+        p_setu(p, "DLSSNR.Height", h);
+        p_seti(p, "DLSSNR.DepthInverted", 0);
+        p_seti(p, "DLSSNR.Reset", D.reset);
+        p_setu(p, "DLSSNR.ColorSubrectBaseX", 0);
+        p_setu(p, "DLSSNR.ColorSubrectBaseY", 0);
+        p_setu(p, "DLSSNR.ColorSubrectWidth", w);
+        p_setu(p, "DLSSNR.ColorSubrectHeight", h);
+        p_setu(p, "DLSSNR.OutputSubrectBaseX", 0);
+        p_setu(p, "DLSSNR.OutputSubrectBaseY", 0);
+        p_setu(p, "DLSSNR.OutputSubrectWidth", w);
+        p_setu(p, "DLSSNR.OutputSubrectHeight", h);
+        p_setu(p, "DLSSNR.DepthSubrectBaseX", 0);
+        p_setu(p, "DLSSNR.DepthSubrectBaseY", 0);
+        p_setu(p, "DLSSNR.DepthSubrectWidth", w);
+        p_setu(p, "DLSSNR.DepthSubrectHeight", h);
+        p_setu(p, "DLSSNR.MVecSubrectBaseX", 0);
+        p_setu(p, "DLSSNR.MVecSubrectBaseY", 0);
+        p_setu(p, "DLSSNR.MVecSubrectWidth", w);
+        p_setu(p, "DLSSNR.MVecSubrectHeight", h);
+        p_setf(p, "DLSSNR.MVecScaleX", 1.0f);
+        p_setf(p, "DLSSNR.MVecScaleY", 1.0f);
+        p_setf(p, "DLSSNR.Intensity", 1.0f);
+        p_setu(p, "DLSSNR.Style", 0);
+        p_setf(p, "DLSSNR.LocalStructureStrength", 0.8f);
+        p_setf(p, "DLSSNR.LocalToneStrength", 0.5f);
+        p_setf(p, "DLSSNR.SkinStructureStrength", 0.5f);
+        p_setu(p, "DLSSNR.UseAutoMask", 1);
+        p_setu(p, "DLSSNR.UICorrection", 1);
+        p_setp(p, "DLSSNR.Depth", &rz);
+        p_setp(p, "DLSSNR.MVec", &rm);
+        p_setp(p, "DLSSNR.Output", &r_nr_out);
+
+        for (int p_idx = 0; p_idx < passes; p_idx++) {
+            p_setp(p, "DLSSNR.Color", p_idx == 0 ? &rc : &r_nr_out);
+            NgxResult nr_r = NR.evaluate(cb, e->nr_feat, p, NULL);
+            if (!NGX_OK(nr_r)) {
+                rt_log("dlaa: DLSS-NR pass %d failed (%08x); skipping remaining NR passes", p_idx + 1, (unsigned)nr_r);
+                nr_active = 0;
+                break;
+            }
+            full_barrier(cb);
+        }
+        if (nr_active) {
+            D.nr_evals += passes;
+            if (D.nr_evals <= (uint64_t)passes || D.nr_evals % 3600 < (uint64_t)passes) {
+                rt_log("dlaa: DLSS-NR Preset B (%dx multipass) evaluated successfully (%llu dispatches, %ux%u)",
+                       passes, (unsigned long long)D.nr_evals, w, h);
+            }
+        }
+    }
+
+    // Stage 2: Super Resolution AI Upscaling Pass (takes neural-enhanced r_nr_out if NR active, else raw rc)
+    NgxResourceVK *sr_input = (nr_active) ? &r_nr_out : &rc;
+    p_setp(p, "Color", sr_input);
     p_setp(p, "Output", &ro);
     p_setp(p, "Depth", &rz);
     p_setp(p, "MotionVectors", &rm);
@@ -1004,8 +1233,6 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     p_setf(p, "Jitter.Offset.Y", jy);
     p_setf(p, "Sharpness", 0.0f);
     p_seti(p, "Reset", D.reset);
-    // One bias mask: the reactive one (TOTK_DLSS_REACTIVE, a test) where it ran, else the characters' (mv_pass), else
-    // none. The parameter object is reused, so it is cleared explicitly.
     NgxResourceVK rk = mk ? res_image(mk->mask_view, mk->mask, VK_FORMAT_R8_UNORM, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0)
                           : res_image(e->mask_view, e->mask, VK_FORMAT_R8_UNORM, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
     p_setp(p, "DLSS.Input.Bias.Current.Color.Mask", mk || masked ? (void *)&rk : NULL);
@@ -1017,38 +1244,49 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     p_setu(p, "DLSS.Render.Subrect.Dimensions.Height", h);
     p_setf(p, "DLSS.Pre.Exposure", 1.0f);
     p_setf(p, "DLSS.Exposure.Scale", 1.0f);
-    // The time since the previous evaluation, which DLSS weighs its history by; 60 fps before the first and after a
-    // gap (a pause, a load), where no history carries over anyway.
-    uint64_t now = plat_now_ns();
-    double dt = D.last_eval_ns ? (now - D.last_eval_ns) / 1e6 : 0;
-    D.last_eval_ns = now;
-    p_setf(p, "FrameTimeDeltaInMsec", dt > 0 && dt < 100 ? (float)dt : 16.67f);
-    c0 = timed ? kern_now_ns() : 0;
-    NgxResult r = N.evaluate(cb, e->feat, p, NULL);
+
+    NgxResult r = 1;
+    if (e->feat && N.evaluate) {
+        r = N.evaluate(cb, e->feat, p, NULL);
+    }
     if (timed) T.cpu_ngx += kern_now_ns() - c0;
-    if (!NGX_OK(r)) return dl_fail("DLSS evaluation", r);
+    if (!NGX_OK(r)) {
+        D.up = 0;
+        return dl_fail("DLSS evaluation", r);
+    }
     if (timed) times_mark(cb, T_DL1);   // through the recorder, after NGX's own commands
     D.reset = 0;
     D.last = e, e->used = D.evals + 1;
     full_barrier(cb);
     vk_mvcheck_output(cb, e->out, ow, oh);   // TOTK_MV_CHECK (test)
-    // the result into the scene target (DLAA: the bloom, the post passes and the HUD read it and draw over it) or into
-    // the scaling pass's target (the HUD draws over it)
+
+    // Output is always e->out at ow x oh
+    VkImage blit_src = e->out;
+    uint32_t src_w = ow;
+    uint32_t src_h = oh;
+
     VkImageBlit b = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-                     .srcOffsets = {{0, 0, 0}, {(int32_t)ow, (int32_t)oh, 1}},
+                     .srcOffsets = {{0, 0, 0}, {(int32_t)src_w, (int32_t)src_h, 1}},
                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, dst->level, dst->base_layer, 1},
                      .dstOffsets = {{0, 0, 0}, {(int32_t)ow, (int32_t)oh, 1}}};
+
     // TOTK_DLAA_MVDEBUG=1 (test): the motion vectors in place of the picture, x in red and y in green, render pixels
     // as scene light (the post passes still run over them)
     static int mvdebug = -1;
     if (mvdebug < 0) mvdebug = rt_knob("DLAA_MVDEBUG", "0");
     static int maskdebug = -1;
     if (maskdebug < 0) maskdebug = rt_knob("DLAA_MASKDEBUG", "0");
-    if (mvdebug || (maskdebug && mk)) b.srcOffsets[1] = (VkOffset3D){(int32_t)w, (int32_t)h, 1};
-    vkCmdBlitImage(cb, mvdebug ? e->mv : maskdebug && mk ? mk->mask : e->out, VK_IMAGE_LAYOUT_GENERAL, dst->image, VK_IMAGE_LAYOUT_GENERAL, 1, &b,
+    if (mvdebug || (maskdebug && mk)) {
+        blit_src = mvdebug ? e->mv : mk->mask;
+        b.srcOffsets[1] = (VkOffset3D){(int32_t)w, (int32_t)h, 1};
+    }
+    vkCmdBlitImage(cb, blit_src, VK_IMAGE_LAYOUT_GENERAL, dst->image, VK_IMAGE_LAYOUT_GENERAL, 1, &b,
                    VK_FILTER_NEAREST);
     full_barrier(cb);
-    if (dst != t) vk_dlaa_swap_img = t->img, vk_dlaa_swap_view = e->out_view;   // the scaling draw reads DLSS's picture
+    if (dst != t) {
+        vk_dlaa_swap_img = t->img;
+        vk_dlaa_swap_view = e->out_view;
+    }
     ex->recorded += 4;
     vk_exec_draw_new_cb();   // NGX bound pipelines and descriptor sets of its own: the next draw binds everything again
     D.jdepth = z->image;
@@ -1056,11 +1294,12 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     if (++D.evals == 1 || D.evals == 300 || D.evals % 3600 == 0)   // 300: one early line with the frames counted
         rt_log("dlaa: %llu frames anti-aliased (scene %ux%u, output %ux%u; %llu frames without the DLAA point, %llu with camera "
                "motion, %llu with the characters' mask, %llu without a camera, %llu jitter holds; resets: %llu size, %llu "
-               "camera, %llu target; reactive mask %llu, without its copy %llu)",
+               "camera, %llu target; reactive mask %llu, without its copy %llu%s)",
                (unsigned long long)D.evals, w, h, ow, oh, (unsigned long long)D.frames_missed,
                (unsigned long long)D.mv_frames, (unsigned long long)D.masked, (unsigned long long)D.mv_none,
                (unsigned long long)D.holds, (unsigned long long)D.why[0], (unsigned long long)D.why[1],
-               (unsigned long long)D.why[2], (unsigned long long)R.made, (unsigned long long)R.missed);
+               (unsigned long long)D.why[2], (unsigned long long)R.made, (unsigned long long)R.missed,
+               nr_active ? " [DLSS-NR Pre-SR Multipass ACTIVE]" : "");
 }
 
 static int scene_color(VkFormat f) {
@@ -1152,6 +1391,7 @@ void vk_dlaa_frame(void) {
     if (on != D.on) {
         rt_log("dlaa: %s", on ? "on" : "off");
         D.on = on;
+        D.failed = 0;
         // either way the next DLAA frame starts a new history from an unjittered frame
         D.reset = 1, D.cam_prev_ok = 0, D.jit_ok = D.jit_used = D.armed = D.done = D.gbuf = D.ended = D.up = 0;
         D.hold = 0;
@@ -1230,6 +1470,6 @@ int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) {
 }
 
 uint64_t vk_dlss_nr_dispatches(void) {
-    return D.evals;
+    return D.nr_evals;
 }
 

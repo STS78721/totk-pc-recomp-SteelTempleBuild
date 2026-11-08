@@ -465,7 +465,7 @@ static void fg_apply_locked(void) {
         eff_mode = "fsr3_fg";
         hw_gate = "GATED (DLSS FG requires NVIDIA RTX GPU -> fallback FSR 3.1 FG)";
     }
-    int mult = !strcmp(mult_s, "6x") ? 6 : !strcmp(mult_s, "4x") ? 4 : 2;
+    int mult = !strcmp(mult_s, "6x") ? 6 : !strcmp(mult_s, "4x") ? 4 : !strcmp(mult_s, "3x") ? 3 : 2;
     if (mult > 2 && (strcmp(eff_mode, "dlss_fg") != 0 || !c->gpu_is_rtx50)) {
         mult = 2;
         if (!strcmp(eff_mode, "dlss_fg"))
@@ -497,6 +497,10 @@ static void fg_apply_locked(void) {
 int vk_fg_active_multiplier(void) {
     int m = __atomic_load_n(&g_fg_mult, __ATOMIC_RELAXED);
     return m > 1 ? m : 1;
+}
+
+int vk_fg_history_valid(void) {
+    return g_fg_hist_valid;
 }
 
 static VkPresentModeKHR pick_present_mode(VkPhysicalDevice pd) {
@@ -970,7 +974,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
                      VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
         last = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         last_stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-        last_write = 0;
+        last_write = VK_ACCESS_2_TRANSFER_READ_BIT;
         g_fg_hist_valid = 1;
     }
     // HDR10: the menu goes into vk_hdr.c's RGBA8 image, which is then blended onto the swapchain image at the HUD's white
@@ -1003,7 +1007,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
         vkCmdCopyImageToBuffer(cb, dst, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, g_cap_buf, 1, &bc);
         last = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         last_stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-        last_write = 0;
+        last_write = VK_ACCESS_2_TRANSFER_READ_BIT;
     }
     if (thumb) {
         if (last != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
@@ -1011,7 +1015,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
                          VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
         last = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         last_stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-        last_write = 0;
+        last_write = VK_ACCESS_2_TRANSFER_READ_BIT;
         record_thumb(cb, dst, slot);
     }
     sync_barrier(cb, dst, last, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, last_stage, last_write, VK_PIPELINE_STAGE_2_NONE, 0);

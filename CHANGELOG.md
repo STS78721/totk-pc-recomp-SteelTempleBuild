@@ -10,6 +10,41 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 
 ---
 
+## [Beta 6] - 2026-11-08
+
+### 🌟 NVIDIA DLSS Neural Rendering (DLSS-NR Preset B) & Pre-SR Multipass
+- **Apology & Technical Transparency:** First and foremost, we owe you an apology. In earlier test builds, DLSS-NR was not behaving visually as it should have—plagued by black-screen parameter mismatches (`0xbad00005`), shadow cascade flickering caused by camera viewport jitter, and simple blit scaling that bypassed the upscaler. We stepped back, listened, and completely rebuilt the neural pipeline natively into the engine so it works exactly as envisioned.
+- **OptiScaler-Inspired Pre-SR Multipass Architecture:**
+  - **Stage 1 (Pre-SR Neural Reconstruction):** DLSS-NR (Preset B) evaluates directly at native render resolution (e.g. 1080p) across sequential neural passes (`1x`, `2x`, `3x`, or `4x`). The neural network resolves complex specular reflections, fine geometry, and lighting details right on your GPU's Tensor Cores before scaling occurs.
+  - **Stage 2 (DLSS Super Resolution AI Upscaling):** The reconstructed neural frame is passed directly into DLSS Super Resolution (Feature 1, Preset M), cleanly upscaling to full 4K (`3840x2160`) with razor-sharp edges and zero blurriness.
+- **Shadow Cascade Flickering Eliminated:** Zeroed viewport camera jitter specifically during DLSS-NR execution, completely fixing shadow cascade jumping while preserving pristine temporal clarity.
+- **In-Engine Controls & INI Configuration:** Full support for `dlss_nr = 1`, `dlss_nr_preset = preset_b`, and `dlss_nr_passes = 1|2|3|4` in both `totk.ini` and the in-game Settings menu (`F1` -> Screen / Upscaler tab).
+- **💡 Real-World Hardware & Tensor Core Performance Note:**
+  - DLSS Neural Rendering (DLSS 5 generation tech) is genuinely advanced and computationally demanding. Running multiple sequential passes (`3x` or `4x`) invokes deep neural inference per frame directly on your Tensor Cores.
+  - While high-end cards like the GeForce RTX 5070 Ti, 4080, and 4090 have ample Tensor compute, multipass *can be taxing* on GPU resources and frame times. We recommend starting with `1x` or `2x` passes for the sweet spot of pristine image quality and rock-solid performance!
+
+---
+
+### ⚡ Hardware-Aware Frame Generation & Reflex Low Latency
+- **Multi-Frame Generation (MFG) Hardened:**
+  - Hardware-gated multipliers (`2x`, `3x`, `4x`, `6x`) with full Blackwell RTX 50 Series support for 4x and 6x Multi-Frame Gen.
+  - Multiplier parsing hardened across the presentation pipeline with zero fallback clamping on RTX 50 series hardware.
+- **Vulkan Synchronization2 Hardening:**
+  - Added explicit transfer read barriers (`VK_ACCESS_2_TRANSFER_READ_BIT`) to presentation history buffers, preventing swapchain queue stalls or presentation jitter.
+- **NVIDIA Reflex (`VK_NV_low_latency2`):**
+  - Complete 6-point latency marker loop (`SIMULATION_START`, `SIMULATION_END`, `RENDERSUBMIT_START`, `RENDERSUBMIT_END`, `PRESENT_START`, `PRESENT_END`) with Boost mode pinned GPU clocks.
+- **Telemetry & HUD Redesign:**
+  - Compact two-line HUD displays net generated frame rate alongside true base rendering rate: `240 FPS (Base 120)` with 1% and 0.1% low percentiles.
+  - Integrated sleek pill badges: `[DLSS 4K]`, `[FG 2x / 4x / 6x]`, and `[NR Active B]`.
+
+---
+
+## [Beta 5h] - 2026-11-07
+- Add 1-click mod archive installer (.zip/.rar/.7z) and GameBanana mod browser integration to launcher.
+- Upstream dev sync (v0.3.13): GPU texture deswizzling, memory defer fixes.
+
+---
+
 ## [Beta 5g] - 2026-11-07
 
 ### 🖥️ Synchronous Borderless Fullscreen Startup (Engine Fix)
