@@ -195,6 +195,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_REFLEX_DESC] = "Synchronises CPU simulation and GPU submission via VK_NV_low_latency2 to eliminate the "
                             "render queue and minimize input lag. Automatically guided to On + Boost when DLSS Frame "
                             "Generation is enabled.",
+    [UI_MENU_REFLEX_OFF] = "Off", [UI_MENU_REFLEX_ON] = "On", [UI_MENU_REFLEX_BOOST] = "On + Boost",
     [UI_MENU_ANTILAG2] = "AMD Anti-Lag 2",
     [UI_MENU_ANTILAG2_DESC] = "Synchronises CPU frame pacing with GPU execution via VK_AMD_anti_lag to minimize click-to-photon "
                               "latency. Automatically guided to On when AMD FSR 3.1 or FSR 4 AI Frame Generation is enabled.",
@@ -731,6 +732,11 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_DLSS_PERFORMANCE] = "Производительность", [UI_MENU_DLSS_ULTRA] = "Макс. производительность",
     [UI_MENU_FXAA] = "Сглаживание игры (FXAA)",
     [UI_MENU_FXAA_DESC] = "Собственное сглаживание FXAA. Слегка размывает мелкие детали; с DLAA оно не нужно.",
+    [UI_MENU_REFLEX] = "NVIDIA Reflex Low Latency",
+    [UI_MENU_REFLEX_DESC] = "Снижает задержку системы на видеокартах NVIDIA с помощью VK_NV_low_latency2. «Вкл + Ускорение» удерживает высокие частоты GPU при упоре в процессор.",
+    [UI_MENU_REFLEX_OFF] = "Выкл",
+    [UI_MENU_REFLEX_ON] = "Вкл",
+    [UI_MENU_REFLEX_BOOST] = "Вкл + Ускорение",
 
     [UI_MENU_FPS_LIMIT] = "Ограничение частоты кадров",
     [UI_MENU_FPS_LIMIT_DESC] = "Наибольшее число кадров в секунду. Выше 60 — экспериментальный режим, нужна «Скорость "
@@ -1572,6 +1578,11 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_FXAA] = "Antisserrilhado do jogo (FXAA)",
     [UI_MENU_FXAA_DESC] = "A suavização de bordas FXAA do próprio jogo. Borra um pouco os detalhes finos; com o DLAA "
                           "ligado não é necessária.",
+    [UI_MENU_REFLEX] = "NVIDIA Reflex Low Latency",
+    [UI_MENU_REFLEX_DESC] = "Reduz a latência do sistema em GPUs NVIDIA usando VK_NV_low_latency2. Ligado + Boost mantém os clocks da GPU altos quando limitado pela CPU.",
+    [UI_MENU_REFLEX_OFF] = "Desligado",
+    [UI_MENU_REFLEX_ON] = "Ligado",
+    [UI_MENU_REFLEX_BOOST] = "Ligado + Boost",
     [UI_MENU_TAB_CHEATS] = "Cheats",
     [UI_MENU_CHEATS_NONE] = "Nenhum cheat para esta versão do jogo. Os cheats de um mod são um arquivo de cheats do "
                             "Atmosphere na pasta cheats dele, com o nome da build do jogo: mods\\<mod>\\cheats\\%s. "

@@ -157,9 +157,14 @@ int vk_fsr_record(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, 
 int vk_fsr_scene(VkCommandBuffer cb, VkImageView src_view, VkImage src_img, uint32_t sw, uint32_t sh, VkImage dst_img,
                  uint32_t dst_level, uint32_t dst_layer, uint32_t dw, uint32_t dh);
 void vk_upscaler_log(const char *fmt, ...);
-void vk_reflex_marker(int marker);
+void vk_fsr_release(void);   // before the device goes away
+void vk_reflex_marker(int marker, uint64_t present_id);   // present_id: the frame's (vk_reflex_frame_begin)
+uint64_t vk_reflex_frame_begin(void);   // SIMULATION_START: the new frame's present ID
+uint64_t vk_reflex_frame(void);         // the ID of the frame the game simulates now
+void vk_reflex_submit_frame(uint64_t id);   // this thread's submissions belong to frame id (0: the game's current one)
+uint64_t vk_reflex_submit_id(void);
+void vk_reflex_present_frame(uint64_t id);  // the present thread, before the blit of frame id
 void vk_reflex_sleep(void);
-uint64_t vk_reflex_current_present_id(void);
 int vk_has_reflex(void);
 void vk_antilag_sleep(void);
 int vk_gpu_is_nvidia(void);
@@ -171,7 +176,6 @@ int vk_gpu_is_intel_arc(void);
 int vk_has_amd_antilag(void);
 int vk_fg_active_multiplier(void);
 int vk_fg_history_valid(void);
-void vk_fsr_release(void);   // before the device goes away
 // Colour adjustment on the present (vk_color.c): with TOTK_COLOR_* away from their defaults, records a pass that writes
 // src's crop rectangle {x, y, w, h}, adjusted, into an RGBA16F image of that size in GENERAL and returns it (the caller
 // scales that one instead, crop {0, 0, w, h}); VK_NULL_HANDLE = nothing recorded. src is in GENERAL, fmt its format.
