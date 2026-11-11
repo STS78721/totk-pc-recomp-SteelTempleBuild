@@ -11,7 +11,7 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
   - Fresh `Portable-StandAlone.zip` installations now ship with clean, Switch-equivalent baseline rendering defaults (`shadow_res = game`, `shadow_scale = 1`, `shadow_range = 100`, `grass_range = 100`, `pcss = 0`, `ao_mode = native`, `contact_shadows = 0`, `dlss_nr = 0`, `fps_limit = 240`, `1920x1080`).
   - Eliminates the hidden 8192×8192 shadow cascade + 300% shadow range + PCSS + SSAO + DLSS-NR preset previously bundled in standalone builds, unlocking full native framerate parity on the Surface & Kakariko Village out of the box while keeping 1-click **Enhanced High** and **SteelTemple Ultra** presets ready in the Launcher!
   - Existing users upgrading via `Update.zip` or 1-Click Update retain all of their personalized `totk.ini` settings automatically.
-- **Bundled `UltraCamVk.nvngx.dll`:** Included alongside `totk.exe` in both `Portable-StandAlone.zip` and `Update.zip` so NVIDIA DLSS Neural Rendering (`dlss_nr = 1`) works immediately whenever enabled.
+- **Out-of-the-Box NVIDIA DLSS-NR Support:** Included all required Vulkan NGX bridge components across `Portable-StandAlone.zip`, `Update.zip`, and `Full-Setup-Wizard.exe` so NVIDIA DLSS Neural Rendering (`dlss_nr = 1`) works immediately whenever enabled.
 
 ### 🎮 Native PlayStation DualSense & DualShock 4 Button Prompts Fix
 - **Fixed Inverted Gliding / Action-Diamond Prompts (`DoCommand_00.bflyt`):**
