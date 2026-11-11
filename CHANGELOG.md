@@ -4,7 +4,12 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 
 ---
 
-## [Beta 6.1] - 2026-11-11
+## [Beta 6.1a] - 2026-11-11
+
+### 🔧 Critical Hotfix (`Beta 6.1a`)
+- **Fixed Game v1.4.3 Launch (`main.npdm` Hash Verification):** Corrected `totk.exe` target build version from `v121` to `v143` (`expected-v1.4.3.json`), resolving the startup `main.npdm` SHA-256 mismatch error introduced in the initial `Beta 6.1` build.
+- **Freshly Re-Lifted v1.4.3 Recompilation Modules:** Re-generated all lifted C modules (`main`, `subsdk0`, `sdk`) against the updated `recomp/patches-v143.txt` so the new `grass_range` (`grass` patch set) and `climb_fix` (`climb` patch set) work natively out of the box.
+- **Portable Profile Fallback Hardening:** Portable installs launched before `profile/` exists now automatically create `profile/` beside `totk.exe` when the build-time fallback path is absent.
 
 ### 🌿 Upstream Synchronization (valentderah/totk-pc-recomp dev v0.4.0+)
 - **NVIDIA Reflex Officially Upstreamed:**

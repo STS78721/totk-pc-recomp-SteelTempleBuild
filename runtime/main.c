@@ -620,7 +620,7 @@ static const char *portable_path(const char *dir, const char *var, const char *s
     }
     char probe[PLAT_PATH_MAX * 3];
     snprintf(out, cap, "%s/%s", dir, sub);
-    if (!must) return plat_dir_exists(out) ? out : fallback;   // the folder itself is the sign
+    if (!must) return (plat_dir_exists(out) || !plat_dir_exists(fallback)) ? out : fallback;   // the folder itself is the sign
     snprintf(probe, sizeof probe, "%s/%s", out, must);
     return plat_file_exists(probe) ? out : fallback;
 }
