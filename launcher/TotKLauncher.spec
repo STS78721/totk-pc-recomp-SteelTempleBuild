@@ -1,16 +1,32 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_submodules
 
 
 a = Analysis(
     ['TotKLauncher.py'],
     pathex=[],
     binaries=[],
-    datas=[('background.jpg', '.'), ('totk.ico', '.'), ('sounds', 'sounds')],
-    hiddenimports=[],
+    datas=[
+        ('background.jpg', '.'),
+        ('totk.ico', '.'),
+        ('sounds', 'sounds'),
+        ('../tools/make_romfs_patches.py', 'tools'),
+        ('../tools/ultrawide_layout.py', 'tools'),
+        ('../tools/button_icons.py', 'tools'),
+    ],
+    hiddenimports=collect_submodules('fontTools') + [
+        'compression.zstd',
+        'argparse',
+        'hashlib',
+        'importlib.util',
+        'struct',
+        'math',
+        'io',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['scipy', 'numpy', 'matplotlib', 'pytest'],
     noarchive=False,
     optimize=0,
 )

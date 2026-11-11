@@ -16,6 +16,7 @@ VENDOR_SDK_FILES = [
     # NVIDIA AI / DLSS stack
     {"name": "nvngx_dlss.dll", "desc": "NVIDIA DLSS 4.5 / Super Resolution", "vendor": "NVIDIA"},
     {"name": "nvngx_dlssnr.dll", "desc": "NVIDIA DLSS-NR Neural Reconstruction", "vendor": "NVIDIA"},
+    {"name": "UltraCamVk.nvngx.dll", "desc": "NVIDIA NGX DLSS-NR Vulkan Bridge", "vendor": "NVIDIA"},
     {"name": "nvngx_dlssg.dll", "desc": "NVIDIA DLSS Frame Generation", "vendor": "NVIDIA"},
     {"name": "sl.common.dll", "desc": "NVIDIA Streamline Common", "vendor": "NVIDIA"},
     {"name": "sl.dlss.dll", "desc": "NVIDIA Streamline DLSS plugin", "vendor": "NVIDIA"},

@@ -40,7 +40,7 @@ COLOR_TRACK_BG = "#263040"
 COLOR_TRACK_ACTIVE = "#ffd24d"
 
 GITHUB_URL = "https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild"
-VERSION_STRING = "Beta 6.1a"
+VERSION_STRING = "Beta 6.2"
 RELEASES_API_URL = "https://api.github.com/repos/STS78721/totk-pc-recomp-SteelTempleBuild/releases/latest"
 MOD_DISABLED_SUFFIX = ".disabled"
 
@@ -318,7 +318,7 @@ def save_ini_settings(ini_file, updates):
         f.writelines(lines)
     return True
 
-UPDATE_FILES = {"totk.exe", "totklauncher.exe", "totk.ini", "totk.ini.example", "controller_guide.txt"}
+UPDATE_FILES = {"totk.exe", "totklauncher.exe", "totk.ini", "totk.ini.example", "controller_guide.txt", "ultracamvk.nvngx.dll"}
 
 def merge_update_ini(current_ini, update_ini, output_ini):
     """Preserve every existing user setting and add only new keys from an update's totk.ini."""
@@ -378,7 +378,8 @@ def extract_update_archive(archive_path, stage_dir):
         for key, info in selected.items():
             target_name = {"totk.exe": "totk.exe", "totklauncher.exe": "TotKLauncher.exe",
                            "totk.ini": "totk.ini", "totk.ini.example": "totk.ini.example",
-                           "controller_guide.txt": "CONTROLLER_GUIDE.txt"}[key]
+                           "controller_guide.txt": "CONTROLLER_GUIDE.txt",
+                           "ultracamvk.nvngx.dll": "UltraCamVk.nvngx.dll"}[key]
             target = stage_dir / target_name
             if key == "totk.ini":
                 incoming = stage_dir / "_update_totk.ini"
@@ -390,7 +391,8 @@ def extract_update_archive(archive_path, stage_dir):
                 with archive.open(info) as source, target.open("wb") as dest:
                     shutil.copyfileobj(source, dest)
     return sorted(("TotKLauncher.exe" if path.name.casefold() == "totklauncher.exe" else
-                   "CONTROLLER_GUIDE.txt" if path.name.casefold() == "controller_guide.txt" else path.name)
+                   "CONTROLLER_GUIDE.txt" if path.name.casefold() == "controller_guide.txt" else
+                   "UltraCamVk.nvngx.dll" if path.name.casefold() == "ultracamvk.nvngx.dll" else path.name)
                   for path in stage_dir.iterdir() if path.is_file() and path.name.casefold() in UPDATE_FILES)
 
 def validate_update_game_executable(exe_path, game_dir, timeout=120):
@@ -533,7 +535,7 @@ class SonySettingsDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Display & Graphics Settings")
-        self.geometry("860x650")
+        self.geometry("900x690")
         self.resizable(False, False)
         self.configure(bg=COLOR_BG_DARK)
         self.transient(parent)
@@ -541,6 +543,7 @@ class SonySettingsDialog(tk.Toplevel):
 
         self.ini_values = parse_ini(INI_PATH)
         self.vars = {}
+        self.slider_widgets = {}
         self.parent_app = parent
         self.monitors = enumerate_displays()
         saved_device = parent.launcher_cfg.get("target_display")
@@ -603,15 +606,30 @@ class SonySettingsDialog(tk.Toplevel):
         self.notebook = ttk.Notebook(self, style="Sony.TNotebook")
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
 
-        self.tab_display = tk.Frame(self.notebook, bg=COLOR_BG_DARK)
-        self.tab_upscale = tk.Frame(self.notebook, bg=COLOR_BG_DARK)
-        self.tab_graphics = tk.Frame(self.notebook, bg=COLOR_BG_DARK)
-        self.tab_audio = tk.Frame(self.notebook, bg=COLOR_BG_DARK)
+        def make_scrollable_tab(title_text):
+            outer = tk.Frame(self.notebook, bg=COLOR_BG_DARK)
+            canvas = tk.Canvas(outer, bg=COLOR_BG_DARK, highlightthickness=0)
+            scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+            canvas.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            inner = tk.Frame(canvas, bg=COLOR_BG_DARK)
+            win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+            inner.bind("<Configure>", lambda _e, c=canvas: c.configure(scrollregion=c.bbox("all")))
+            canvas.bind("<Configure>", lambda e, c=canvas, w=win_id: c.itemconfigure(w, width=e.width))
 
-        self.notebook.add(self.tab_display, text="  DISPLAY  ")
-        self.notebook.add(self.tab_upscale, text="  UPSCALING & PERFORMANCE  ")
-        self.notebook.add(self.tab_graphics, text="  GRAPHICS & LIGHTING  ")
-        self.notebook.add(self.tab_audio, text="  CONTROLS & AUDIO  ")
+            def _on_wheel(event, c=canvas):
+                if c.winfo_exists():
+                    c.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            inner.bind("<Enter>", lambda _e, fn=_on_wheel: self.bind_all("<MouseWheel>", fn))
+            inner.bind("<Leave>", lambda _e: self.unbind_all("<MouseWheel>"))
+            self.notebook.add(outer, text=title_text)
+            return inner
+
+        self.tab_display = make_scrollable_tab("  DISPLAY  ")
+        self.tab_upscale = make_scrollable_tab("  UPSCALING & PERFORMANCE  ")
+        self.tab_graphics = make_scrollable_tab("  GRAPHICS & LIGHTING  ")
+        self.tab_audio = make_scrollable_tab("  CONTROLS & AUDIO  ")
 
         self.build_display_tab()
         self.build_upscale_tab()
@@ -722,23 +740,110 @@ class SonySettingsDialog(tk.Toplevel):
 
         slider = SonySlider(frame, from_, to_, curr_val, on_change=on_slide, width=190, height=28)
         slider.pack(side=tk.RIGHT, padx=5)
+        self.slider_widgets[var_key] = (slider, val_lbl, unit)
         return frame
+
+    def set_var(self, key, value):
+        if key not in self.vars:
+            return
+        combo = self.resolution_combo if key == "window_size" else self.fps_combo if key == "fps_limit" else None
+        if combo is not None:
+            values = list(combo.cget("values"))
+            if str(value) not in values:
+                values.append(str(value))
+                combo.configure(values=values)
+        if key in self.slider_widgets:
+            slider, _lbl, _unit = self.slider_widgets[key]
+            slider.set(int(value))
+        else:
+            self.vars[key].set(str(value))
+
+    def apply_quality_preset(self, tier):
+        is_nv = self.gpu_vendor == "NVIDIA"
+        if tier == "max_fps":
+            preset = {
+                "fps_limit": "240",
+                "upscaler": "dlss" if is_nv else "fsr",
+                "upscaler_preset": "native",
+                "dlss_preset": "default",
+                "dlss_nr": "0",
+                "fg_mode": "off",
+                "reflex": "on",
+                "shadow_res": "game",
+                "shadow_scale": "1",
+                "shadow_range": "100",
+                "grass_range": "100",
+                "pcss": "0",
+                "ao_mode": "native",
+                "contact_shadows": "0",
+                "aniso": "16",
+            }
+            label = "Max FPS (Default) preset selected — clean Switch-parity rendering at maximum framerate."
+        elif tier == "enhanced":
+            preset = {
+                "fps_limit": "240",
+                "upscaler": "dlss" if is_nv else "fsr",
+                "upscaler_preset": "quality",
+                "dlss_preset": "preset_k",
+                "dlss_nr": "0",
+                "reflex": "on",
+                "shadow_res": "1024",
+                "shadow_scale": "2",
+                "shadow_range": "150",
+                "grass_range": "150",
+                "pcss": "15",
+                "ao_mode": "xegtao",
+                "contact_shadows": "35",
+                "aniso": "16",
+            }
+            label = "Enhanced High preset selected — 2K cascades, XeGTAO, PCSS soft shadows & 150% draw distance."
+        else:
+            preset = {
+                "fps_limit": "240",
+                "upscaler": "dlss" if is_nv else ("fsr4" if self.gpu_vendor == "AMD" else "fsr"),
+                "upscaler_preset": "quality",
+                "dlss_preset": "preset_m",
+                "dlss_nr": "1" if is_nv else "0",
+                "reflex": "boost",
+                "shadow_res": "2048",
+                "shadow_scale": "3",
+                "shadow_range": "250",
+                "grass_range": "200",
+                "pcss": "25",
+                "ao_mode": "xegtao",
+                "contact_shadows": "50",
+                "aniso": "16",
+            }
+            label = "SteelTemple Ultra preset selected — 6K cascades, XeGTAO, Contact Shadows & DLSS-NR."
+        for k, v in preset.items():
+            self.set_var(k, v)
+        self.update_ultrawide_card()
+        self.handheld_preset_status.config(text=f"{label} Click SAVE & APPLY.", fg=COLOR_ACCENT_GREEN)
 
     def build_display_tab(self):
         f = self.tab_display
-        preset_box = tk.LabelFrame(f, text=" Presets ", font=("Segoe UI", 9, "bold"),
+        preset_box = tk.LabelFrame(f, text=" 1-Click Performance & Graphics Presets ", font=("Segoe UI", 9, "bold"),
                                    fg=COLOR_GOLD, bg=COLOR_BG_DARK, bd=1,
                                    highlightthickness=1, highlightbackground=COLOR_CARD_BORDER,
                                    padx=12, pady=8, labelanchor="nw")
         preset_box.pack(fill=tk.X, padx=20, pady=(10, 4))
+        btn_row = tk.Frame(preset_box, bg=COLOR_BG_DARK)
+        btn_row.pack(fill=tk.X, pady=(0, 6))
+        for txt, cmd, primary in (
+            ("🚀 MAX FPS (DEFAULT)", lambda: self.apply_quality_preset("max_fps"), True),
+            ("⚖️ ENHANCED HIGH", lambda: self.apply_quality_preset("enhanced"), False),
+            ("💎 STEELTEMPLE ULTRA", lambda: self.apply_quality_preset("ultra"), False),
+            ("🎮 STEAM DECK / HANDHELD", self.apply_handheld_preset, False),
+        ):
+            tk.Button(btn_row, text=txt, command=cmd, font=("Segoe UI", 8, "bold"),
+                      fg="#000000" if primary else COLOR_WHITE,
+                      bg=COLOR_GOLD if primary else COLOR_BUTTON_HOVER,
+                      activebackground=COLOR_GOLD_HOVER, activeforeground="#000000",
+                      bd=0, padx=10, pady=6, cursor="hand2").pack(side=tk.LEFT, padx=(0, 8))
         self.handheld_preset_status = tk.Label(
-            preset_box, text="Balanced handheld settings for Steam Deck and similar devices.",
+            preset_box, text="Pick a 1-click profile above or customize individual settings across tabs.",
             font=("Segoe UI", 8), fg=COLOR_TEXT_DIM, bg=COLOR_BG_DARK, anchor="w")
-        self.handheld_preset_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        tk.Button(preset_box, text="STEAM DECK / HANDHELD PRESET", command=self.apply_handheld_preset,
-                  font=("Segoe UI", 8, "bold"), fg="#000000", bg=COLOR_GOLD,
-                  activebackground=COLOR_GOLD_HOVER, bd=0, padx=12, pady=7,
-                  cursor="hand2").pack(side=tk.RIGHT, padx=(10, 0))
+        self.handheld_preset_status.pack(fill=tk.X)
         monitor_row = tk.Frame(f, bg=COLOR_BG_DARK, pady=8)
         monitor_row.pack(fill=tk.X, padx=20)
         tk.Label(monitor_row, text="Target Display Monitor", font=("Segoe UI", 10, "bold"),
@@ -750,22 +855,29 @@ class SonySettingsDialog(tk.Toplevel):
                                           font=("Segoe UI", 9))
         self.monitor_combo.pack(side=tk.RIGHT, padx=5)
         self.monitor_combo.bind("<<ComboboxSelected>>", self.on_monitor_changed)
-        self.create_row_toggle(f, "Exclusive Fullscreen", "fullscreen", "1", "Start directly in true fullscreen window.")
-        resolutions = ["3840x2160", "2560x1440", "1920x1080", "1280x720", "3440x1440", "5120x1440"]
+        self.create_row_toggle(f, "Borderless Fullscreen", "fullscreen", "1", "Start directly in borderless fullscreen window (F11 toggles in-game).")
+        resolutions = ["3840x2160", "2560x1440", "1920x1080", "1280x720", "1280x800", "3440x1440", "5120x1440"]
         if self.display_resolution not in resolutions:
             resolutions.insert(0, self.display_resolution)
-        self.create_row_dropdown(f, "Window Resolution", "window_size",
-                                 resolutions, self.get_val("window_size", self.display_resolution), "Target display resolution for rendering & window bounds.")
+        self.create_row_dropdown(f, "Output & Window Resolution", "window_size",
+                                 resolutions, self.get_val("output_res", self.get_val("window_size", "1920x1080")),
+                                 "Target game output resolution & window bounds (updates both output_res and window_size).")
         self.resolution_combo = f.winfo_children()[-1].winfo_children()[-1]
         self.resolution_combo.bind("<<ComboboxSelected>>", self.on_resolution_changed)
-        frame_rates = sorted(set(["30", "60", "90", "120", "144", str(self.display_refresh), "display"]),
+        frame_rates = sorted(set(["30", "40", "45", "60", "90", "120", "144", "180", "240", str(self.display_refresh), "display"]),
                              key=lambda value: (value == "display", int(value) if value != "display" else 999))
-        if "40" not in frame_rates:
-            frame_rates.append("40")
         self.create_row_dropdown(f, "Frame Rate Limit", "fps_limit",
-                                 frame_rates, self.get_val("fps_limit", str(self.display_refresh)),
-                                 "Max frame rate cap. 'display' automatically synchronizes with monitor Hz.")
+                                 frame_rates, self.get_val("fps_limit", "240"),
+                                 "Max frame rate cap (240 = max engine rate; 'display' matches monitor refresh rate).")
         self.fps_combo = f.winfo_children()[-1].winfo_children()[-1]
+        self.create_row_dropdown(f, "V-Sync / Presentation Mode", "vk_present",
+                                 ["mailbox", "fifo", "immediate"], "mailbox",
+                                 "Mailbox (Fast low-latency tear-free), FIFO (Strict V-Sync), Immediate (Uncapped/Tearing).")
+        self.create_row_dropdown(f, "Aspect Ratio Behavior", "aspect",
+                                 ["fit", "stretch"], "fit",
+                                 "Fit preserves 16:9 picture with pillarboxes on ultrawide; stretch fills monitor.")
+        self.create_row_slider(f, "Field of View (FOV)", "fov", 70, 140, 100, "%",
+                               "Expands or narrows player camera view (100% is Switch default).")
 
         self.ultrawide_card = tk.Frame(f, bg=COLOR_CARD, padx=14, pady=10,
                                        highlightthickness=1, highlightbackground=COLOR_CARD_BORDER)
@@ -792,20 +904,17 @@ class SonySettingsDialog(tk.Toplevel):
             "fps_limit": "40",
             "upscaler": "fsr",
             "upscaler_preset": "balanced",
+            "dlss_nr": "0",
             "shadow_res": "768",
+            "shadow_scale": "1",
             "shadow_range": "100",
+            "grass_range": "100",
+            "pcss": "0",
+            "ao_mode": "native",
+            "contact_shadows": "0",
         }
         for key, value in preset.items():
-            variable = self.vars.get(key)
-            if variable is None:
-                continue
-            combo = self.resolution_combo if key == "window_size" else self.fps_combo if key == "fps_limit" else None
-            if combo is not None:
-                values = list(combo.cget("values"))
-                if value not in values:
-                    values.append(value)
-                    combo.configure(values=values)
-            variable.set(value)
+            self.set_var(key, value)
         self.update_ultrawide_card()
         self.handheld_preset_status.config(
             text="Handheld preset selected. Choose SAVE & APPLY to write it to totk.ini.",
@@ -931,61 +1040,64 @@ class SonySettingsDialog(tk.Toplevel):
             fps_values.insert(-1, refresh)
         self.fps_combo.configure(values=fps_values)
         self.vars["fps_limit"].set(refresh)
-        self.create_row_dropdown(f, "V-Sync / Presentation Mode", "vk_present",
-                                 ["mailbox", "fifo", "immediate"], "mailbox",
-                                 "Mailbox (Smooth low-latency VSync), FIFO (Strict VSync), Immediate (Tearing/Raw).")
-        self.create_row_dropdown(f, "Aspect Ratio Behavior", "aspect",
-                                 ["fit", "stretch"], "fit",
-                                 "Fit preserves 16:9 picture with pillarboxes on ultrawide; stretch fills monitor.")
-        self.create_row_slider(f, "Field of View (FOV)", "fov", 70, 140, 100, "%",
-                               "Expands or narrows player camera view (100% is Switch default).")
 
     def build_upscale_tab(self):
         f = self.tab_upscale
         self.create_row_dropdown(f, "Upscaler Technology", "upscaler",
-                                 ["dlss", "fsr4", "fsr", "xess", "bilinear", "off"], "dlss",
-                                 "Deep Learning Super Sampling, FSR 4.1.2/1.0, Intel XeSS, or native rasterization.")
+                                 ["dlss", "fsr4", "xess", "fsr", "bilinear"], "fsr",
+                                 "NVIDIA DLSS 4.5 / 4, AMD FSR 4.1.2 / 1.0, Intel XeSS, or bilinear native blit.")
         self.upscaler_note = tk.Label(f, text="", font=("Segoe UI", 8), fg=COLOR_GOLD, bg=COLOR_BG_DARK, anchor="w")
         self.upscaler_note.pack(fill=tk.X, padx=22, pady=(0, 4))
         self.vars["upscaler"].trace_add("write", self._update_upscaler_advice)
         self._update_upscaler_advice()
-        self.create_row_dropdown(f, "DLSS Quality Preset", "upscaler_preset",
-                                 ["dlaa", "quality", "balanced", "performance", "ultra_performance"], "quality",
-                                 "DLAA renders native 100% scene. Quality (67%), Balanced (58%), Performance (50%).")
+        raw_preset = self.get_val("upscaler_preset", "native")
+        if raw_preset == "dlaa":
+            self.ini_values["upscaler_preset"] = "native"
+        self.create_row_dropdown(f, "Upscale / Scene Quality Preset", "upscaler_preset",
+                                 ["native", "quality", "balanced", "performance", "ultra_performance"], "native",
+                                 "Native / DLAA renders 100% scene. Quality (67%), Balanced (58%), Performance (50%).")
         self.create_row_dropdown(f, "DLSS Neural Model Generation", "dlss_preset",
-                                 ["preset_m", "preset_k", "preset_j", "preset_l", "preset_e", "preset_c"], "preset_m",
-                                 "Preset M is newest generation (v3.10). Preset K/J/L offer tuned ghosting profiles.")
+                                 ["default", "preset_k", "preset_j", "preset_m", "preset_l", "preset_e", "preset_c"], "default",
+                                 "Default auto-picks optimal Transformer model (K for DLAA/Quality/Balanced, M for Perf).")
+        self.create_row_toggle(f, "DLSS Neural Rendering (DLSS-NR Preset B)", "dlss_nr", "0",
+                               "Pre-SR Tensor Core neural surface & lighting reconstruction (GPU-intensive; RTX GPUs).")
         self.create_row_dropdown(f, "Frame Generation Mode", "fg_mode",
                                  ["off", "dlss_fg", "fsr3_fg", "fsr4_fg", "xefg"], "off",
-                                 "Synthesize AI intermediate frames to double/multiply framerates.")
+                                 "Synthesize AI intermediate frames to multiply framerates (DLSS FG, FSR FG, XeFG).")
         self.create_row_dropdown(f, "Frame Gen Multiplier", "fg_mult",
-                                 ["2x", "3x", "4x", "6x"], "2x",
-                                 "Multi-Frame Generation (2x standard; 4x/6x supported on RTX 50 / XeFG).")
-        self.create_row_dropdown(f, "Low Latency Mode", "reflex",
-                                 ["boost", "on", "off"], "boost",
-                                 "NVIDIA Reflex low latency (boost locks high GPU clocks to minimize input lag).")
+                                 ["2x", "4x", "6x"], "2x",
+                                 "Multi-Frame Generation (2x on RTX 40+ / FSR FG; 4x/6x Multi-FG on RTX 50 Series).")
+        self.create_row_dropdown(f, "NVIDIA Reflex Low Latency", "reflex",
+                                 ["on", "boost", "off"], "on",
+                                 "Reduces input-to-photon latency (boost keeps GPU clocks high in CPU-bound areas).")
 
     def build_graphics_tab(self):
         f = self.tab_graphics
-        self.create_row_dropdown(f, "Sun Shadow Resolution", "shadow_res",
-                                 ["game", "512", "768", "1024", "1536", "2048"], "1024",
-                                 "Shadow map size (2048 is ultra crisp; game uses dynamic 400-960).")
-        self.create_row_dropdown(f, "Shadow Cascade Range", "shadow_range",
-                                 ["100", "150", "200", "300"], "200",
-                                 "Moves shadow draw distance out into the horizon (200 = 320m, 300 = 480m).")
-        self.create_row_slider(f, "Soft Sun Shadows (PCSS)", "pcss", 0, 200, 10, "%",
-                               "Physically plausible penumbra width (0 = hard edge, 10-50 = realistic blur).")
+        self.create_row_dropdown(f, "Sun Shadow Base Resolution", "shadow_res",
+                                 ["game", "256", "512", "768", "1024", "1536", "2048"], "game",
+                                 "Base sun shadow map size ('game' = fast dynamic Switch default; 1024-2048 = sharper).")
+        self.create_row_dropdown(f, "Shadow Cascade Multiplier", "shadow_scale",
+                                 ["1", "2", "3", "4"], "1",
+                                 "Multiplies shadow cascade resolution per side (1 = fastest default; 2-4 = ultra crisp).")
+        self.create_row_slider(f, "Shadow Cascade Range", "shadow_range", 50, 400, 100, "%",
+                               "Sun shadow draw distance (100% = 160m default; higher pushes soft cascade transitions out).")
+        self.create_row_slider(f, "Grass Draw Distance", "grass_range", 50, 400, 100, "%",
+                               "How far around Link meadow grass renders (100% = 62.5m default; 200% = 125m).")
+        self.create_row_slider(f, "Soft Sun Shadows (PCSS)", "pcss", 0, 200, 0, "%",
+                               "Variable-penumbra soft sun shadows (0% = fast 4-tap filter; 15-35% = natural blur).")
         self.create_row_dropdown(f, "Ambient Occlusion (AO)", "ao_mode",
-                                 ["native", "ssao", "hbao", "xegtao", "off"], "ssao",
-                                 "Intel XeGTAO (Ground Truth), HBAO, SSAO Enhanced, or Native game shading.")
-        self.create_row_slider(f, "Contact Shadows", "contact_shadows", 0, 100, 50, "%",
-                               "Screen-space micro shadows under feet, pebbles, grass, and creases.")
+                                 ["native", "xegtao", "hbao", "ssao", "off"], "native",
+                                 "Native (fastest Switch AO), Intel XeGTAO (Ground Truth), HBAO, or Enhanced SSAO.")
+        self.create_row_slider(f, "Screen-Space Contact Shadows", "contact_shadows", 0, 100, 0, "%",
+                               "Micro-shadows under feet, stones, and grass (0% = off for max FPS; 35-50% = rich grounding).")
         self.create_row_dropdown(f, "Anisotropic Texture Filtering", "aniso",
                                  ["game", "2", "4", "8", "16"], "16",
-                                 "16x keeps distant ground, cliffs, and roads sharp at oblique angles.")
+                                 "16x keeps distant ground, cliffs, and roads sharp at oblique angles with negligible cost.")
         self.create_row_dropdown(f, "Color Profile", "color_preset",
                                  ["default", "vivid", "clarity", "custom"], "default",
                                  "Custom tuning presets for vibrancy, gamma, contrast, and black level.")
+        self.create_row_toggle(f, "Precompile Shaders at Startup", "pipe_prebuild", "1",
+                               "Builds known Vulkan pipelines ahead of time when launching to prevent gameplay stutter.")
         warm_frame = tk.Frame(f, bg=COLOR_CARD, padx=14, pady=10,
                               highlightthickness=1, highlightbackground=COLOR_CARD_BORDER)
         warm_frame.pack(fill=tk.X, padx=20, pady=(8, 10))
@@ -1039,14 +1151,40 @@ class SonySettingsDialog(tk.Toplevel):
 
     def build_audio_tab(self):
         f = self.tab_audio
+        # Migrate if an older launcher mistakenly saved dualsense/dualshock4/pc into pad_layout
+        raw_layout = self.get_val("pad_layout", "auto")
+        if raw_layout in ("dualsense", "dualshock4", "pc"):
+            if "prompts" not in self.ini_values:
+                self.ini_values["prompts"] = raw_layout
+            self.ini_values["pad_layout"] = "auto"
+        self.create_row_dropdown(f, "Gamepad Button Layout (Physical Mapping)", "pad_layout",
+                                 ["auto", "xbox", "nintendo"], "auto",
+                                 "auto/xbox: Bottom (Cross/A) confirms, Left (Square/X) glides. nintendo: Right confirms, Top glides.")
+        self.create_row_dropdown(f, "On-Screen Button Prompts (HUD Icons)", "prompts",
+                                 ["nintendo", "dualsense", "dualshock4", "xbox", "pc"], "nintendo",
+                                 "HUD button glyphs: Nintendo Switch, PS5 DualSense, PS4 DualShock 4, Xbox, or Keyboard/Mouse.")
+        self.create_row_toggle(f, "PS5 DualSense Adaptive Triggers & Haptic Audio", "dualsense", "0",
+                               "Enable hardware bow/shield trigger resistance and 4-channel voice-coil haptics (Sony DualSense).")
+        raw_mouse = self.get_val("mouse_mode", "direct")
+        if raw_mouse in ("1", "true", "on"):
+            self.ini_values["mouse_mode"] = "direct"
+        elif raw_mouse in ("0", "false", "off"):
+            self.ini_values["mouse_mode"] = "stick"
+        self.create_row_dropdown(f, "Mouse Camera Mode", "mouse_mode",
+                                 ["direct", "stick"], "direct",
+                                 "Direct gives raw 1:1 mouse aiming & camera rotation; stick emulates a right analog stick.")
+        self.create_row_toggle(f, "Mouse Cursor in Menus & Map", "menu_cursor", "1",
+                               "Point-and-click navigation in inventory, menus, shops, and Purah Pad map.")
+        self.create_row_toggle(f, "Purah Pad Map Left-Click Select", "map_click", "1",
+                               "Left mouse button places/selects pins on the Purah Pad map.")
+        self.create_row_toggle(f, "Dialogue Mouse Click Advance", "dialogue_click", "1",
+                               "Left click advances/skips dialogue (B) and right click confirms choices (A).")
+        raw_audio = self.get_val("audio_channels", "auto")
+        if raw_audio in ("surround51", "surround71"):
+            self.ini_values["audio_channels"] = "5.1"
         self.create_row_dropdown(f, "Audio Channels", "audio_channels",
-                                 ["stereo", "surround51", "surround71"], "stereo",
-                                 "Output speaker configuration.")
-        self.create_row_dropdown(f, "Controller Button Prompts", "pad_layout",
-                                 ["auto", "dualsense", "dualshock4", "xbox", "pc"], "auto",
-                                 "Auto detects controller, or force DualSense, Xbox, or Keyboard icons.")
-        self.create_row_toggle(f, "Direct Mouse Camera Aiming", "mouse_mode", "1",
-                               "Allows direct 1:1 raw mouse input for archery and camera rotation.")
+                                 ["auto", "stereo", "5.1"], "auto",
+                                 "Output speaker configuration ('auto' picks 5.1 on surround setups, stereo otherwise).")
         sound_row = tk.Frame(f, bg=COLOR_BG_DARK, pady=8)
         sound_row.pack(fill=tk.X, padx=20)
         self.sound_effects_var = tk.BooleanVar(value=self.parent_app.launcher_cfg.get("launcher_sound_effects", True))
@@ -1055,47 +1193,133 @@ class SonySettingsDialog(tk.Toplevel):
                        activebackground=COLOR_BG_DARK, activeforeground=COLOR_GOLD,
                        selectcolor=COLOR_CARD, bd=0, highlightthickness=0, cursor="hand2").pack(side=tk.LEFT)
 
+    @staticmethod
+    def _wanted_prompts_style(prompts_val, pad_layout_val):
+        p = (prompts_val or "nintendo").strip().lower()
+        l = (pad_layout_val or "auto").strip().lower()
+        if p in ("", "nintendo"):
+            return None
+        if p == "pc":
+            return "pc"
+        by_pos = l in ("nintendo", "xbox_prompts")
+        if p in ("xbox", "dualsense", "dualshock4"):
+            return p if by_pos else f"{p}-label"
+        return None
+
     def save_and_close(self):
         updates = {}
         for k, var in self.vars.items():
             updates[k] = str(var.get())
-        if save_ini_settings(INI_PATH, updates):
-            self.parent_app.launcher_cfg["target_display"] = self.target_monitor["device"]
-            self.parent_app.launcher_cfg["launcher_sound_effects"] = self.sound_effects_var.get()
-            save_launcher_config(self.parent_app.launcher_cfg)
-            play_ui_sound.enabled = self.sound_effects_var.get()
-            self.parent_app.move_to_monitor(self.target_monitor)
-            messagebox.showinfo("Settings Saved", "Settings successfully saved to totk.ini!")
-            self.destroy()
-        else:
+        if "window_size" in updates:
+            updates["output_res"] = updates["window_size"]
+        if "upscaler" in updates:
+            updates["dlaa"] = "1" if updates["upscaler"] == "dlss" else "0"
+        if "upscaler_preset" in updates:
+            preset_val = updates["upscaler_preset"]
+            updates["dlss"] = "dlaa" if preset_val == "native" else preset_val
+            if updates.get("upscaler") != "dlss":
+                scale_map = {"native": "100", "quality": "67", "balanced": "58",
+                             "performance": "50", "ultra_performance": "33"}
+                if preset_val in scale_map:
+                    updates["render_scale"] = scale_map[preset_val]
+        if not save_ini_settings(INI_PATH, updates):
             messagebox.showerror("Error", "Failed to write to totk.ini!")
+            return
+        self.parent_app.launcher_cfg["target_display"] = self.target_monitor["device"]
+        self.parent_app.launcher_cfg["launcher_sound_effects"] = self.sound_effects_var.get()
+        save_launcher_config(self.parent_app.launcher_cfg)
+        play_ui_sound.enabled = self.sound_effects_var.get()
+        self.parent_app.move_to_monitor(self.target_monitor)
+
+        style = self._wanted_prompts_style(updates.get("prompts"), updates.get("pad_layout"))
+        romfs = GAME_DIR / "romfs"
+        out_dir = GAME_DIR / f"romfs-patches-{style}" if style else None
+        if style and out_dir and not (out_dir / "manifest.tsv").is_file() and (romfs / "romfs.bin").is_file() and (romfs / "index.json").is_file():
+            self._build_prompts_and_close(style, romfs, out_dir)
+            return
+
+        messagebox.showinfo("Settings Saved", "Settings successfully saved to totk.ini!")
+        self.destroy()
+
+    def _build_prompts_and_close(self, style, romfs, out_dir):
+        self.handheld_preset_status.config(
+            text=f"Generating {style} button prompt overlay from RomFS (one-time setup, ~30s)...",
+            fg=COLOR_GOLD)
+        self.update_idletasks()
+
+        def worker():
+            err = None
+            try:
+                idx = json.loads((romfs / "index.json").read_text(encoding="utf-8"))
+                paths = {e.get("path", "") for e in idx.get("files", [])}
+                version = "v143" if "UI/LayoutArchive/Common.Product.140.Nin_NX_NVN.blarc.zs" in paths else "v121"
+                if getattr(sys, "frozen", False):
+                    cmd = [sys.executable, "--run-prompts-patcher", style, version, str(romfs), str(out_dir)]
+                else:
+                    cmd = [sys.executable, str(Path(__file__).resolve()), "--run-prompts-patcher",
+                           style, version, str(romfs), str(out_dir)]
+                res = subprocess.run(cmd, cwd=str(GAME_DIR), capture_output=True, text=True, timeout=900)
+                if res.returncode != 0 or not (out_dir / "manifest.tsv").is_file():
+                    err = (res.stderr or res.stdout or "Unknown error").strip()[-800:]
+            except Exception as exc:
+                err = str(exc)
+
+            def finish():
+                if err:
+                    messagebox.showwarning(
+                        "Settings Saved",
+                        f"Settings saved to totk.ini, but {style} prompts overlay could not be built automatically:\n{err}")
+                else:
+                    messagebox.showinfo(
+                        "Settings Saved",
+                        f"Settings saved and {style} button prompts generated successfully!")
+                self.destroy()
+
+            try:
+                self.after(0, finish)
+            except tk.TclError:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def restore_defaults(self):
-        if messagebox.askyesno("Restore Defaults", "Reset all settings to recommended defaults?"):
+        if messagebox.askyesno("Restore Defaults", "Reset all settings to fast, clean recommended defaults?"):
+            is_nv = self.gpu_vendor == "NVIDIA"
             defaults = {
                 "fullscreen": "1",
                 "window_size": "1920x1080",
-                "fps_limit": "120",
+                "fps_limit": "240",
                 "vk_present": "mailbox",
                 "aspect": "fit",
                 "fov": "100",
-                "upscaler": "dlss",
-                "upscaler_preset": "quality",
-                "dlss_preset": "preset_m",
+                "upscaler": "dlss" if is_nv else "fsr",
+                "upscaler_preset": "native",
+                "dlss_preset": "default",
+                "dlss_nr": "0",
                 "fg_mode": "off",
-                "reflex": "boost",
-                "shadow_res": "1024",
-                "shadow_range": "200",
-                "pcss": "10",
-                "ao_mode": "ssao",
-                "contact_shadows": "50",
+                "fg_mult": "2x",
+                "reflex": "on",
+                "shadow_res": "game",
+                "shadow_scale": "1",
+                "shadow_range": "100",
+                "grass_range": "100",
+                "pcss": "0",
+                "ao_mode": "native",
+                "contact_shadows": "0",
                 "aniso": "16",
                 "color_preset": "default",
-                "pad_layout": "auto"
+                "pipe_prebuild": "1",
+                "pad_layout": "auto",
+                "prompts": "nintendo",
+                "dualsense": "0",
+                "mouse_mode": "direct",
+                "menu_cursor": "1",
+                "map_click": "1",
+                "dialogue_click": "1",
+                "audio_channels": "auto",
             }
             for k, val in defaults.items():
-                if k in self.vars:
-                    self.vars[k].set(val)
+                self.set_var(k, val)
             self.sound_effects_var.set(True)
 
 
@@ -1221,8 +1445,13 @@ def ensure_4k_texture_pack_config(mod_name, game_dir=None):
                 in_mods = False
 
             if in_mods and (stripped.startswith("mods_order =") or stripped.startswith("# mods_order =")):
-                new_order = f"mods_order = PS5 UI - Default - Monochrome|{mod_name}|Pack"
-                new_lines.append(new_order)
+                existing_val = ""
+                if not stripped.startswith("#") and "=" in stripped:
+                    existing_val = stripped.split("=", 1)[1].strip()
+                parts = [p.strip() for p in existing_val.split("|") if p.strip()]
+                if mod_name not in parts:
+                    parts.append(mod_name)
+                new_lines.append(f"mods_order = {'|'.join(parts)}")
             else:
                 new_lines.append(line)
 
@@ -1961,7 +2190,7 @@ $changed = [System.Collections.Generic.List[string]]::new()
 try {{
     Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 700
-    foreach ($name in @('totk.exe','totk.ini','totk.ini.example','CONTROLLER_GUIDE.txt','TotKLauncher.exe')) {{
+    foreach ($name in @('totk.exe','totk.ini','totk.ini.example','CONTROLLER_GUIDE.txt','UltraCamVk.nvngx.dll','TotKLauncher.exe')) {{
         $source = Join-Path $stage $name
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {{ continue }}
         $target = Join-Path $game $name
@@ -2171,6 +2400,23 @@ def main():
             print(f"PATCHED_MODS={cnt}")
         except Exception as exc:
             print(f"PATCHED_MODS=0 (error: {exc})")
+        return
+
+    if len(sys.argv) >= 6 and sys.argv[1] == "--run-prompts-patcher":
+        style, version, romfs, out = sys.argv[2:6]
+        candidates = [get_base_dir() / "tools" / "make_romfs_patches.py",
+                      get_base_dir().parent / "tools" / "make_romfs_patches.py"]
+        tool = next((path for path in candidates if path.is_file()), None)
+        if tool is None:
+            raise FileNotFoundError("Bundled tools/make_romfs_patches.py was not found.")
+        reuse_args = []
+        base_style = style[:-6] if style.endswith("-label") else None
+        if base_style:
+            base_dir = Path(out).parent / f"romfs-patches-{base_style}"
+            if (base_dir / "manifest.tsv").is_file():
+                reuse_args = ["--reuse", str(base_dir)]
+        sys.argv = [str(tool), "--version", version, "--prompts", style, *reuse_args, "--romfs", romfs, "--out", out]
+        runpy.run_path(str(tool), run_name="__main__")
         return
 
     cfg = load_launcher_config()

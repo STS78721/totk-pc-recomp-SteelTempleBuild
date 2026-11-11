@@ -833,12 +833,13 @@ static void row_game_lang(void) {
 // The frame limit (frame_rate.c): unset, the older fps60 = 0 still means 30. The monitor choice shows the rate it gives.
 static void row_fps_limit() {
     // 40 and 45: the Steam Deck's screen runs at 40 to 60 Hz (the OLED to 90); 40 divides 40 and 120 Hz evenly
-    static const char *const vals[] = {"30", "40", "45", "60", "90", "120", "144", "display"};
-    static const UiTextId ids[] = {UI_MENU_FPS_30, UI_MENU_FPS_40,  UI_MENU_FPS_45,  UI_MENU_FPS_60,
-                                   UI_MENU_FPS_90, UI_MENU_FPS_120, UI_MENU_FPS_144, UI_MENU_FPS_DISPLAY};
+    static const char *const vals[] = {"30", "40", "45", "60", "90", "120", "144", "180", "240", "display"};
     enum { N = sizeof vals / sizeof *vals };
-    const char *names[N];
-    for (int i = 0; i < N; i++) names[i] = menu_text(ids[i]);
+    const char *names[N] = {
+        menu_text(UI_MENU_FPS_30),  menu_text(UI_MENU_FPS_40),  menu_text(UI_MENU_FPS_45),  menu_text(UI_MENU_FPS_60),
+        menu_text(UI_MENU_FPS_90),  menu_text(UI_MENU_FPS_120), menu_text(UI_MENU_FPS_144), "180 fps",
+        "240 fps (Max)",            menu_text(UI_MENU_FPS_DISPLAY),
+    };
     static char display[64];
     double hz = gfx_window_refresh_hz();
     if (hz > 0) {

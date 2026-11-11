@@ -317,11 +317,10 @@ int input_prompts_pick(const char *prompts, const char *pad_layout) {
 
 const char *input_prompts_folder(int prompts, const char *pad_layout) {
     if (prompts == PROMPTS_PC) return "romfs-patches-pc";
-    if (prompts == PROMPTS_XBOX) {
-        return input_pad_layout_pick(pad_layout, 0) == PAD_LAYOUT_NINTENDO ? "romfs-patches-xbox" : "romfs-patches-xbox-label";
-    }
-    if (prompts == PROMPTS_DUALSENSE) return "romfs-patches-dualsense";
-    if (prompts == PROMPTS_DUALSHOCK4) return "romfs-patches-dualshock4";
+    int by_pos = input_pad_layout_pick(pad_layout, 0) == PAD_LAYOUT_NINTENDO;
+    if (prompts == PROMPTS_XBOX) return by_pos ? "romfs-patches-xbox" : "romfs-patches-xbox-label";
+    if (prompts == PROMPTS_DUALSENSE) return by_pos ? "romfs-patches-dualsense" : "romfs-patches-dualsense-label";
+    if (prompts == PROMPTS_DUALSHOCK4) return by_pos ? "romfs-patches-dualshock4" : "romfs-patches-dualshock4-label";
     return NULL;
 }
 

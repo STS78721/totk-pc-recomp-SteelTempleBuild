@@ -14,6 +14,7 @@
 
 #include "cfg.h"
 #include "host.h"
+#include "input_map.h"
 #include "platform/platform.h"
 
 #define PREFIX "TOTK_"
@@ -165,7 +166,7 @@ static const CfgMeta metas[] = {
     {"SHADOW_RANGE", "100", "50..400", RESTART}, {"GRASS_RANGE", "100", "50..400", RESTART}, {"AO_MODE", "native", "native|ssao|hbao|xegtao|off", LIVE}, {"CONTACT_SHADOWS", "0", "0..100", LIVE},
     {"PCSS", "0", "0..200", RESTART},
     // Game
-    {"FPS_LIMIT", "60", "30|40|45|60|90|120|144|display", LIVE}, {"FPS60", "1", "0|1", LIVE}, {"FRAME_QUEUE", "0", "0|1", LIVE},
+    {"FPS_LIMIT", "60", "30|40|45|60|90|120|144|180|240|display", LIVE}, {"FPS60", "1", "0|1", LIVE}, {"FRAME_QUEUE", "0", "0|1", LIVE},
     {"REALTIME", "1", "0|1", RESTART}, {"CLOTH_REALTIME", "1", "0|1", RESTART},
     {"MODS_REBUILD", "auto", "auto|off", RESTART},
     {"HIGHFPS_FIX", "1", "0|1", RESTART}, {"CLIMB_FIX", "1", "0|1", RESTART},
@@ -391,22 +392,21 @@ static const unsigned SHAPED[][2] = {
     {1920, 1280}, {2160, 1440}, {2256, 1504}, {2880, 1920}, {3000, 2000}, // 3:2
 };
 static char screen_res[16];   // set once by cfg_init, "" for none
-// romfs-patches-xbox-, romfs-patches-xbox-label- and romfs-patches-pc-<screen_res> have a manifest (set once by
-// cfg_init)
-static const char *const screen_folders[3] = {"romfs-patches-xbox", "romfs-patches-xbox-label", "romfs-patches-pc"};
-static int screen_prompts[3];
+static const char *const screen_folders[7] = {
+    "romfs-patches-xbox", "romfs-patches-xbox-label", "romfs-patches-pc",
+    "romfs-patches-dualsense", "romfs-patches-dualsense-label",
+    "romfs-patches-dualshock4", "romfs-patches-dualshock4-label"
+};
+static int screen_prompts[7];
 
-// Whether the prompts in effect have their folder at screen_res. The same picks as input_map.c input_prompts_pick and
-// input_prompts_folder: an unknown or empty value is the Nintendo prompts, an unset one Xbox while the pad layout is
-// "xbox_prompts"; the Xbox prompts take romfs-patches-xbox with the Nintendo pad layout (or "xbox_prompts") and
-// romfs-patches-xbox-label with any other.
+// Whether the prompts in effect have their folder at screen_res.
 static int shape_keeps_prompts(void) {
     const char *p = raw_get(PREFIX "PROMPTS"), *l = raw_get(PREFIX "PAD_LAYOUT");
-    if (p && *p && !strcasecmp(p, "pc")) return screen_prompts[2];
-    int xbox = p && *p ? !strcasecmp(p, "xbox") : l && !strcasecmp(l, "xbox_prompts");
-    if (!xbox) return 1;
-    int by_position = l && (!strcasecmp(l, "nintendo") || !strcasecmp(l, "xbox_prompts"));
-    return screen_prompts[by_position ? 0 : 1];
+    const char *want = input_prompts_folder(input_prompts_pick(p, l), l);
+    if (!want) return 1;
+    for (int i = 0; i < 7; i++)
+        if (!strcmp(screen_folders[i], want)) return screen_prompts[i];
+    return 1;
 }
 
 static void screen_default(void) {
@@ -424,7 +424,7 @@ static void screen_default(void) {
     if (best < 0) best = fit;
     if (best < 0) return;
     snprintf(screen_res, sizeof screen_res, "%ux%u", SHAPED[best][0], SHAPED[best][1]);
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 7; i++)
         screen_prompts[i] = romfs_shaped_prompts_ready(screen_folders[i], SHAPED[best][0], SHAPED[best][1]);
     if (!raw_get(PREFIX "OUTPUT_RES") && shape_keeps_prompts())
         rt_log("cfg: the display is %dx%d: output_res defaults to %s, its shape (totk.ini output_res sets another)", sw,

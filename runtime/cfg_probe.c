@@ -330,6 +330,17 @@ int probe_cfg(void) {
               EQ(input_prompts_folder(PROMPTS_XBOX, "auto"), "romfs-patches-xbox-label") &&
               EQ(input_prompts_folder(PROMPTS_XBOX, NULL), "romfs-patches-xbox-label"),
           "prompts: the face buttons by position for the Nintendo layout, by label for xbox and auto");
+    CHECK(input_prompts_pick("dualsense", "auto") == PROMPTS_DUALSENSE &&
+              input_prompts_pick("ps5", "nintendo") == PROMPTS_DUALSENSE &&
+              input_prompts_pick("dualshock4", "auto") == PROMPTS_DUALSHOCK4 &&
+              input_prompts_pick("ps4", "xbox") == PROMPTS_DUALSHOCK4 &&
+              EQ(input_prompts_folder(PROMPTS_DUALSENSE, "nintendo"), "romfs-patches-dualsense") &&
+              EQ(input_prompts_folder(PROMPTS_DUALSENSE, "xbox"), "romfs-patches-dualsense-label") &&
+              EQ(input_prompts_folder(PROMPTS_DUALSENSE, "auto"), "romfs-patches-dualsense-label") &&
+              EQ(input_prompts_folder(PROMPTS_DUALSHOCK4, "nintendo"), "romfs-patches-dualshock4") &&
+              EQ(input_prompts_folder(PROMPTS_DUALSHOCK4, "xbox"), "romfs-patches-dualshock4-label") &&
+              EQ(input_prompts_folder(PROMPTS_DUALSHOCK4, "auto"), "romfs-patches-dualshock4-label"),
+          "prompts: PlayStation prompts match both Nintendo positional and Xbox/Western label layouts");
     // romfs-patches-xbox shows A as B (tests/romfs_prompts_test.py checks the folders' contents). It is right exactly
     // where the layout puts A on the east button, which an Xbox pad labels B.
     input_map_reset();

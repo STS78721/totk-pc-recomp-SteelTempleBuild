@@ -4,6 +4,28 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 
 ---
 
+## [Beta 6.2] - 2026-11-11
+
+### 🚀 Out-of-the-Box Performance & Benchmark Parity
+- **Clean Max-FPS Baseline Configuration (`default_totk.ini`):**
+  - Fresh `Portable-StandAlone.zip` installations now ship with clean, Switch-equivalent baseline rendering defaults (`shadow_res = game`, `shadow_scale = 1`, `shadow_range = 100`, `grass_range = 100`, `pcss = 0`, `ao_mode = native`, `contact_shadows = 0`, `dlss_nr = 0`, `fps_limit = 240`, `1920x1080`).
+  - Eliminates the hidden 8192×8192 shadow cascade + 300% shadow range + PCSS + SSAO + DLSS-NR preset previously bundled in standalone builds, unlocking full native framerate parity on the Surface & Kakariko Village out of the box while keeping 1-click **Enhanced High** and **SteelTemple Ultra** presets ready in the Launcher!
+  - Existing users upgrading via `Update.zip` or 1-Click Update retain all of their personalized `totk.ini` settings automatically.
+- **Bundled `UltraCamVk.nvngx.dll`:** Included alongside `totk.exe` in both `Portable-StandAlone.zip` and `Update.zip` so NVIDIA DLSS Neural Rendering (`dlss_nr = 1`) works immediately whenever enabled.
+
+### 🎮 Native PlayStation DualSense & DualShock 4 Button Prompts Fix
+- **Fixed Inverted Gliding / Action-Diamond Prompts (`DoCommand_00.bflyt`):**
+  - Added procedural vector PlayStation button prompt generation (`dualsense`, `dualsense-label`, `dualshock4`, `dualshock4-label`) to `tools/button_icons.py` and `tools/make_romfs_patches.py`, drawing crisp Cross (`✕`), Circle (`○`), Square (`□`), Triangle (`△`), `L1`, `R1`, `L2`, `R2`, Options, Create/Share, and D-Pad icons across `External.bfotf`, HUD masks (`__Combined.bntx`), `.bflyt` panes, and all 14 `Mals` languages.
+  - Updated `runtime/input_map.c` and `runtime/romfs.c` so PlayStation prompts automatically match **both** `pad_layout = auto / xbox` (Western layout: Cross=Confirm, Circle=Cancel/Put Away, Square=Jump/Glide, Triangle=Attack with properly mirrored action-diamond positions) AND `pad_layout = nintendo` (Positional layout: Circle=Confirm, Cross=Cancel, Triangle=Jump/Glide, Square=Attack).
+  - Removed the conflicting pre-enabled third-party `PS5 UI` mod override from fresh standalone packages so switching between Nintendo, Xbox, DualSense, DualShock 4, and PC prompts works cleanly.
+
+### 🖥️ Standalone Launcher (`TotKLauncher.exe`) Enhancements & Fixes
+- **1-Click Graphics & Performance Presets:** Added instant **Max FPS (Default)**, **Enhanced High**, **SteelTemple Ultra**, and **Steam Deck / Handheld** preset buttons in Settings.
+- **Startup Shader Pre-Compilation Toggle (`pipe_prebuild`):** Added *"Precompile Shaders at Startup"* toggle right in the Graphics tab alongside 1-click Vulkan shader pre-warming.
+- **Fixed Controls & Config Mapping:** Separated **Gamepad Button Layout (`pad_layout`)** from **On-Screen Button Prompts (`prompts`)**, fixed `audio_channels` (`auto` / `stereo` / `5.1`), `mouse_mode` (`direct` / `stick`), `upscaler` valid choices, restored `vk_present` / `aspect` / `fov` controls on the Display tab, and exposed `dlss_nr`, `shadow_scale`, `grass_range`, `dualsense`, `menu_cursor`, `map_click`, and `dialogue_click`.
+
+---
+
 ## [Beta 6.1a] - 2026-11-11
 
 ### 🔧 Critical Hotfix (`Beta 6.1a`)

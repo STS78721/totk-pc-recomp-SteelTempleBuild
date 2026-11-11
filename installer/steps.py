@@ -1101,12 +1101,23 @@ class Prepare(Step):
         # files are missing, so the setup warns once and goes on. The keyboard and mouse prompts are the PcPrompts
         # step's: they follow totk.ini's bindings.
         failed = None
-        for style in ('xbox', 'xbox-label'):
+        prompt_styles = (
+            ('xbox', None),
+            ('xbox-label', 'xbox'),
+            ('dualsense', None),
+            ('dualsense-label', 'dualsense'),
+            ('dualshock4', 'dualsense'),
+            ('dualshock4-label', 'dualsense-label'),
+        )
+        for style, reuse_from in prompt_styles:
             out = dest / f'romfs-patches-{style}'
             remove(out)
+            reuse_args = []
+            if reuse_from and (dest / f'romfs-patches-{reuse_from}' / 'manifest.tsv').is_file():
+                reuse_args = ['--reuse', dest / f'romfs-patches-{reuse_from}']
             code, log = run_tool(ctx, f'prepare-{style}', layout.tools / 'make_romfs_patches.py',
                                  ['--version', version_tag(game_version(ctx)), '--romfs', dest / 'romfs', '--out', out,
-                                  '--prompts', style])
+                                  '--prompts', style, *reuse_args])
             if code:
                 remove(out)
                 failed = failed or (code, log)
@@ -1116,7 +1127,7 @@ class Prepare(Step):
         # the prompts and the screen's shape. Only the Common archive differs from romfs-patches-<style>; --reuse links
         # the fonts, messages and size table from there instead of compressing them again, so each folder takes
         # seconds and a few MiB. Optional like romfs-patches-<style>, and skipped without it.
-        for style in ('xbox', 'xbox-label'):
+        for style in ('xbox', 'xbox-label', 'dualsense', 'dualsense-label', 'dualshock4', 'dualshock4-label'):
             plain = dest / f'romfs-patches-{style}'
             for size in ASPECT_SIZES:
                 out = dest / f'romfs-patches-{style}-{size}'

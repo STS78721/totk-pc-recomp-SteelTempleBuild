@@ -72,10 +72,9 @@ ap.add_argument('--romfs', type=Path, help='default build/extracted/<version>/ro
 ap.add_argument('--out', type=Path,
                 help='default build/<version>/romfs-patches (romfs-patches-<style> with --prompts)')
 ap.add_argument('--aspect', help='<w>x<h> of a game resolution of another shape than 16:9: also lay the UI out for it')
-ap.add_argument('--prompts', choices=('xbox', 'xbox-label', 'pc'),
-                help='Xbox button icons in the prompts: xbox for pad_layout = nintendo (A shown as B, X as Y), '
-                     'xbox-label for pad_layout = xbox or auto (the face buttons keep their letters), '
-                     'pc for the keyboard and mouse')
+ap.add_argument('--prompts', choices=('xbox', 'xbox-label', 'pc', 'dualsense', 'dualsense-label', 'dualshock4', 'dualshock4-label'),
+                help='button icons in the prompts: xbox / dualsense / dualshock4 for pad_layout = nintendo, '
+                     '*-label for pad_layout = xbox or auto, pc for the keyboard and mouse')
 ap.add_argument('--binds', type=Path, help='--prompts pc: a totk.ini whose bind_ lines the key icons follow')
 ap.add_argument('--xbox-prompts', dest='prompts', action='store_const', const='xbox', help='the same as --prompts xbox')
 ap.add_argument('--reuse', type=Path,
@@ -336,7 +335,10 @@ RESTBL = max((p for p in files if p.startswith('System/Resource/ResourceSizeTabl
              key=lambda p: int((re.search(r'\.(\d+)\.', p) or [0, 0])[1]), default=None)
 by_position = args.prompts == 'xbox'   # the face buttons' prompts swapped to the labels (pad_layout = nintendo)
 pc = args.prompts == 'pc'
-letter_panes = by_position or pc      # the one-letter panes around the action prompt change
+ps = args.prompts in ('dualsense', 'dualsense-label', 'dualshock4', 'dualshock4-label')
+ps_by_pos = args.prompts in ('dualsense', 'dualshock4')
+ps_label = args.prompts in ('dualsense-label', 'dualshock4-label')
+letter_panes = by_position or pc or ps   # the one-letter panes around the action prompt change
 if args.prompts:
     assert FONTS, 'no Font/Font*.Nin_NX_NVN.bfarc.zs in the RomFS'
     assert MALS or not letter_panes, 'no Mals/<language>.Product.<version>.sarc.zs in the RomFS'
@@ -412,6 +414,11 @@ if args.prompts:
         # The text prompts show Y as T (button_icons.PC_TEXT_KEYS); the button guide's images keep the left click
         font_drawn = icons.pc_icons(glyphs, advances, icons.pc_binds(ini, text=True))
         pane_letters = {letter: icons.pc_letter(binds[letter]) for letter in 'ABXY'}
+    elif ps:
+        ps_style = args.prompts.removesuffix('-label')
+        drawn = font_drawn = icons.ps_icons(glyphs, style=ps_style, by_position=ps_by_pos)
+        pane_letters = ({'A': '○', 'B': '×', 'X': '△', 'Y': '□'}
+                        if ps_by_pos else {'A': '×', 'B': '○', 'X': '□', 'Y': '△'})
     else:
         drawn = font_drawn = icons.xbox_icons(glyphs)
         pane_letters = KEY_LETTERS
@@ -420,7 +427,7 @@ if args.prompts:
     if by_position:
         bntx_swap(blarc, bntx, KEY_TEXTURES)
     diamond = []
-    if args.prompts == 'xbox-label':
+    if args.prompts == 'xbox-label' or ps_label:
         diamond = bflyt_xbox_diamond(blarc, *members['blyt/DoCommand_00.bflyt'])
     if letter_panes:
         for member, (lo, hi) in members.items():
@@ -429,7 +436,8 @@ if args.prompts:
                 if changed:
                     letters[member] = changed
         assert 'blyt/DoCommand_00.bflyt' in letters, 'no letter panes in blyt/DoCommand_00.bflyt'
-    hud = icons.bntx_redraw(blarc, bntx, icons.PC_HUD_TEXTURES if pc else icons.HUD_TEXTURES, drawn)
+    hud_tex = icons.PC_HUD_TEXTURES if pc else icons.PS_HUD_TEXTURES if ps else icons.HUD_TEXTURES
+    hud = icons.bntx_redraw(blarc, bntx, hud_tex, drawn)
     outputs[ARCHIVE] = bytes(blarc)
     fonts = {}   # each distinct font is drawn once (1.4.3's four archives hold the same one)
     for path, bfarc in archives.items():

@@ -42,6 +42,8 @@ TEXT_ARCHIVE = 'Font/Font.Nin_NX_NVN.bfarc.zs'
 TEXT_FONTS = ('scft/ninP_RodinNTLG-B_DH_003_subset.bfotf', 'scft/nintendo_NTLG-DB_DH_002.bfotf')
 # The button guide's images and the glyph each one shows.
 HUD_TEXTURES = {'Nt_KeyTexL_00': 0xE044, 'Nt_KeyTexZL_00': 0xE046}
+PS_HUD_TEXTURES = {'Nt_KeyTexA_00': 0xE040, 'Nt_KeyTexB_00': 0xE041, 'Nt_KeyTexX_00': 0xE042, 'Nt_KeyTexY_00': 0xE043,
+                   'Nt_KeyTexL_00': 0xE044, 'Nt_KeyTexZL_00': 0xE046}
 
 
 def xor(data, key):
@@ -182,6 +184,80 @@ def xbox_icons(g):
         0xE04B: menu(), 0xE04C: view(),
         0xE049: dpad('up', 'down', 'left', 'right'), 0xE060: dpad('up'), 0xE061: dpad('down'),
         0xE062: dpad('left'), 0xE063: dpad('right'), 0xE064: dpad('up', 'down'), 0xE065: dpad('left', 'right'),
+    }
+
+
+def ps_icons(g, style='dualsense', by_position=False):
+    """Code point -> (advance, draw(pen)) for PlayStation DualSense / DualShock 4 button icons.
+    When by_position is True (pad_layout = nintendo), Switch A/B/X/Y map to East(Circle)/South(Cross)/North(Triangle)/West(Square).
+    When by_position is False (pad_layout = xbox or auto), Switch A/B/X/Y map to South(Cross)/East(Circle)/West(Square)/North(Triangle)."""
+    base = xbox_icons(g)
+
+    def bumper(label, advance=760):
+        def draw(pen):
+            rounded(pen, 40, Y0 + 70, advance - 40, Y1 - 70, 70, 150)
+            g.hole(pen, label, advance / 2, CY, 230, advance - 200)
+        return advance, draw
+
+    def trigger(label, advance=760):
+        def draw(pen):
+            rounded(pen, 50, Y0, advance - 50, Y1, 60, 230)
+            g.hole(pen, label, advance / 2, CY - 20, 230, advance - 200)
+        return advance, draw
+
+    def ps_cross(advance=640):
+        def draw(pen):
+            cx = advance / 2
+            circle(pen, cx, CY, R)
+            a, w, s = R * 0.54, R * 0.125, 0.70710678
+            # Single clockwise 12-vertex + polygon rotated 45 degrees: cuts a clean X hole with no self-intersections
+            pts = [(w, w), (a, w), (a, -w), (w, -w), (w, -a), (-w, -a),
+                   (-w, -w), (-a, -w), (-a, w), (-w, w), (-w, a), (w, a)]
+            polygon(pen, [(cx + (x - y) * s, CY + (x + y) * s) for x, y in pts])
+        return advance, draw
+
+    def ps_circle(advance=640):
+        def draw(pen):
+            cx = advance / 2
+            circle(pen, cx, CY, R)
+            circle(ReverseContourPen(pen), cx, CY, R * 0.56)
+            circle(pen, cx, CY, R * 0.33)
+        return advance, draw
+
+    def ps_square(advance=640):
+        def draw(pen):
+            cx, s1, s2 = advance / 2, R * 0.48, R * 0.27
+            circle(pen, cx, CY, R)
+            polygon(ReverseContourPen(pen), [(cx - s1, CY - s1), (cx + s1, CY - s1), (cx + s1, CY + s1), (cx - s1, CY + s1)])
+            polygon(pen, [(cx - s2, CY - s2), (cx + s2, CY - s2), (cx + s2, CY + s2), (cx - s2, CY + s2)])
+        return advance, draw
+
+    def ps_triangle(advance=640):
+        def draw(pen):
+            cx, tcy = advance / 2, CY - R * 0.08
+            r1, r2, k = R * 0.64, R * 0.24, 0.8660254
+            circle(pen, cx, CY, R)
+            polygon(ReverseContourPen(pen), [(cx, tcy + r1), (cx - r1 * k, tcy - r1 * 0.5), (cx + r1 * k, tcy - r1 * 0.5)])
+            polygon(pen, [(cx, tcy + r2), (cx - r2 * k, tcy - r2 * 0.5), (cx + r2 * k, tcy - r2 * 0.5)])
+        return advance, draw
+
+    def create_btn(advance=640):   # DualSense Create button: three radiating strokes inside a circle
+        def draw(pen):
+            cx = advance / 2
+            circle(pen, cx, CY, R)
+            rounded(ReverseContourPen(pen), cx - 32, CY - 135, cx + 32, CY + 135, 28)
+            polygon(pen, [(cx - 150, CY + 95), (cx - 98, CY + 120), (cx - 60, CY - 95), (cx - 112, CY - 120)])
+            polygon(pen, [(cx + 98, CY + 120), (cx + 150, CY + 95), (cx + 112, CY - 120), (cx + 60, CY - 95)])
+        return advance, draw
+
+    face = ({0xE040: ps_circle(), 0xE041: ps_cross(), 0xE042: ps_triangle(), 0xE043: ps_square()}
+            if by_position else
+            {0xE040: ps_cross(), 0xE041: ps_circle(), 0xE042: ps_square(), 0xE043: ps_triangle()})
+    return {
+        **base,
+        **face,
+        0xE044: bumper('L1'), 0xE045: bumper('R1'), 0xE046: trigger('L2'), 0xE047: trigger('R2'),
+        0xE04C: create_btn() if style == 'dualsense' else base[0xE04C],
     }
 
 

@@ -932,14 +932,15 @@ static void camera_overlay(void) {
 // did not load (ROMFS_PROMPTS_*). The menu compares them with the settings in effect (ui/menu.cpp prompts_note).
 // Each folder keeps its name, but at a game resolution of another shape than 16:9 its files come from dir,
 // <name>-<w>x<h> (overlay_init), and ready is that one's.
-static struct { const char *name; int ready; char dir[64]; } prompts_folders[5];
+#define PROMPTS_FOLDER_COUNT 7
+static struct { const char *name; int ready; char dir[64]; } prompts_folders[PROMPTS_FOLDER_COUNT];
 static const char *prompts_wanted, *prompts_loaded;
 static int prompts_off;
 
 const char *romfs_prompts(void) { return prompts_loaded; }
 
 int romfs_prompts_ready(const char *folder) {
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < PROMPTS_FOLDER_COUNT; i++)
         if (folder && prompts_folders[i].name && !strcmp(prompts_folders[i].name, folder)) return prompts_folders[i].ready;
     return 0;
 }
@@ -998,14 +999,16 @@ static void overlay_init(void) {
                    "(tools/make_romfs_patches.py --aspect %ux%u)", out[0], out[1], out[0], out[1]);
         }
     }
-    static const char *const pnames[5] = {
+    static const char *const pnames[PROMPTS_FOLDER_COUNT] = {
         "romfs-patches-xbox",
         "romfs-patches-xbox-label",
         "romfs-patches-pc",
         "romfs-patches-dualsense",
-        "romfs-patches-dualshock4"
+        "romfs-patches-dualsense-label",
+        "romfs-patches-dualshock4",
+        "romfs-patches-dualshock4-label"
     };
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < PROMPTS_FOLDER_COUNT; i++) {
         const char *name = pnames[i];
         char *dir = prompts_folders[i].dir;
         if (wide) snprintf(dir, sizeof prompts_folders[i].dir, "%s-%ux%u", name, out[0], out[1]);
@@ -1016,10 +1019,31 @@ static void overlay_init(void) {
     }
     const char *layout = cfg_value("TOTK_PAD_LAYOUT");
     int pick = input_prompts_pick(cfg_get("TOTK_PROMPTS"), layout);
-    const char *style = pick == PROMPTS_PC ? "keyboard and mouse" : "Xbox";
+    const char *style = pick == PROMPTS_PC         ? "keyboard and mouse"
+                        : pick == PROMPTS_DUALSENSE  ? "DualSense"
+                        : pick == PROMPTS_DUALSHOCK4 ? "DualShock 4"
+                                                     : "Xbox";
+    const char *pname = pick == PROMPTS_PC         ? "pc"
+                        : pick == PROMPTS_DUALSENSE  ? "dualsense"
+                        : pick == PROMPTS_DUALSHOCK4 ? "dualshock4"
+                                                     : "xbox";
     prompts_wanted = input_prompts_folder(pick, layout);
+    if (prompts_wanted && !wide && !romfs_prompts_ready(prompts_wanted) && ends_with(prompts_wanted, "-label")) {
+        char base[64];
+        size_t bl = strlen(prompts_wanted) - strlen("-label");
+        if (bl < sizeof base) {
+            memcpy(base, prompts_wanted, bl);
+            base[bl] = 0;
+            for (int i = 0; i < PROMPTS_FOLDER_COUNT; i++)
+                if (!strcmp(prompts_folders[i].name, base) && prompts_folders[i].ready) {
+                    rt_log("RomFS overlay: %s missing, falling back to %s", prompts_wanted, prompts_folders[i].name);
+                    prompts_wanted = prompts_folders[i].name;
+                    break;
+                }
+        }
+    }
     const char *wanted_dir = prompts_wanted;   // the folder its files come from
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < PROMPTS_FOLDER_COUNT; i++)
         if (prompts_wanted && !strcmp(prompts_folders[i].name, prompts_wanted)) wanted_dir = prompts_folders[i].dir;
     prompts_off = !prompts_wanted                         ? ROMFS_PROMPTS_OK
                   : patches && !wide                      ? ROMFS_PROMPTS_PATCHES
@@ -1047,7 +1071,7 @@ static void overlay_init(void) {
             snprintf(why, sizeof why, "%s", prompts_off == ROMFS_PROMPTS_PATCHES
                                                 ? "TOTK_ROMFS_PATCHES is set"
                                                 : "their folder has no manifest.tsv (run the setup again)");
-        rt_log("RomFS overlay: prompts = %s, but %s; Switch prompts stay", pick == PROMPTS_PC ? "pc" : "xbox", why);
+        rt_log("RomFS overlay: prompts = %s, but %s; Switch prompts stay", pname, why);
     }
     size_t prompts_end = noverlay;
     char plain[2100];   // romfs-patches, when it has a manifest

@@ -124,7 +124,7 @@ class ModernTotkInstaller(ctk.CTk):
         self.var_install_dir = tk.StringVar(value=r"C:\Games\Tears of the Kingdom PC\GAME")
         
         # Feature toggles
-        self.var_controller_ui = tk.StringVar(value="PlayStation 5 DualSense (Monochrome)")
+        self.var_controller_ui = tk.StringVar(value="PlayStation 5 DualSense (Native Recomp)")
         self.var_install_sdks = tk.BooleanVar(value=True)
         self.var_import_save = tk.BooleanVar(value=True)
         self.var_selected_save = tk.StringVar(value="")
@@ -215,7 +215,7 @@ class ModernTotkInstaller(ctk.CTk):
                                  font=ctk.CTkFont(size=20, weight="bold"), text_color=ACCENT_GREEN)
         title_lbl.pack(pady=(12, 2))
 
-        sub_lbl = ctk.CTkLabel(header, text="SteelTempSaint's ToTK Recomp (Beta 5d) | 60 FPS • DLSS 4.5 • Reflex • DualSense Immersion",
+        sub_lbl = ctk.CTkLabel(header, text="SteelTempSaint's ToTK Recomp (Beta 6.2) | Up to 240 FPS • DLSS 4.5 / DLSS-NR • Multi-FG • Reflex • Native DualSense",
                                font=ctk.CTkFont(size=12, weight="bold"), text_color=TEXT_DIM)
         sub_lbl.pack(pady=(0, 12))
 
@@ -514,17 +514,14 @@ class ModernTotkInstaller(ctk.CTk):
 
         # 3. Controller UI
         ctrl_name = self.var_controller_ui.get()
-        choice = next((c for c in CONTROLLER_UI_CHOICES if c["name"] == ctrl_name), None)
-        if choice and choice["id"] != "nintendo_default":
-            self.lbl_status.configure(text=f"Integrating {choice['name']} Prompts...")
-            self.log(f"Installing Controller UI: {choice['name']}...")
-            ok = install_controller_ui(choice["id"], target)
-            if ok:
-                self.log(f"[✓] {choice['name']} successfully installed to mods/ folder.")
-            else:
-                self.log(f"[!] Checked local fallback for {choice['name']}.")
+        choice = next((c for c in CONTROLLER_UI_CHOICES if c["name"] == ctrl_name), CONTROLLER_UI_CHOICES[-1])
+        self.lbl_status.configure(text=f"Configuring {choice['name']} Prompts...")
+        self.log(f"Configuring Controller UI: {choice['name']}...")
+        ok = install_controller_ui(choice["id"], target)
+        if ok:
+            self.log(f"[✓] {choice['name']} configured natively in totk.ini.")
         else:
-            self.log("[✓] Nintendo Switch controller prompts selected.")
+            self.log(f"[!] Configured {choice['name']} in totk.ini (overlay will build once RomFS is extracted).")
 
         self.progress_bar.set(0.65)
 
