@@ -795,7 +795,6 @@ static void rows_ao(void) {
     static const char *const names[] = {"Native AO (Default)", "SSAO (Enhanced)", "HBAO (Horizon-Based)", "Intel XeGTAO (Ground Truth)", "Off"};
     opt_choice_list("TOTK_AO_MODE", UI_MENU_AO_MODE, vals, names, 5, UI_MENU_AO_MODE_DESC);
 }
-}
 
 static void row_gpu(void) {
     const char *vals[MAX_GPUS + 1], *names[MAX_GPUS + 1];
