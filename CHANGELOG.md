@@ -4,9 +4,35 @@ All notable changes to the **SteelTempSaint ToTK Recomp** project will be docume
 
 ---
 
-## [Unreleased]
-- Add a validated one-click GitHub update download/apply flow, a Vulkan shader pre-warm action, and a Save Backup Vault with pre-restore snapshots.
-- Fix the Save Backup Vault process guard to match the installed game executable path and report its PID/path when blocking an operation.
+## [Beta 6.1] - 2026-11-11
+
+### 🌿 Upstream Synchronization (valentderah/totk-pc-recomp dev v0.4.0+)
+- **NVIDIA Reflex Officially Upstreamed:**
+  - Upstream officially merged our NVIDIA Reflex low latency implementation into the core project (`#913`, `#638` by STS78721, carried by itaskaev2).
+  - Cleaned up front-end declarations and optimized frame ID queries without present lock contention.
+- **DLSS 1.2.1 Post-Scaling Fix:**
+  - Skips the game's internal 1.2.1 scaling draw after DLSS instead of re-feeding DLSS output back into the engine blitter (`#1112` by itaskaev2, `#1106`). Resolves double-scaling artifacts when running game version 1.2.1.
+- **Grass Range Setting (`grass_range`):**
+  - Added new graphic setting `grass_range = 50..400` in both config and in-game menu (`F1` -> Screen / Shadows & Lighting).
+  - Scales how far around Link grass renders (from 31 m at 50% to 250 m at 400%, default 62.5 m at 100%).
+- **Mouse & Keyboard Controls Overhaul:**
+  - **Purah Pad Map Click (`map_click = 1`):** Left mouse click selects pins and points of interest directly on the map.
+  - **Dialogue Mouse Click (`dialogue_click = 1`):** Left click advances dialogue (B) and right click confirms (A).
+  - **Mouse Wheel Scroll:** Scroll wheel navigation across inventory grids, item strips, and quick-menus.
+  - **Purah Pad Scope Zoom:** Mouse wheel smoothly zooms the camera scope and binoculars.
+  - **Native Keyboard Glyph Prompts:** Dynamic `T` key icon prompt and cleaner PC key prompts throughout the HUD.
+- **Version-Agnostic Mod File Serving:**
+  - Mod loader now transparently serves files named for different game versions under their matching internal names, fixing multi-version audio, voice, and soundtrack mods.
+- **Dynamic DLSS Preset Slot Invalidation:**
+  - Cleanly reclaims all DLSS resolution slots when changing presets at runtime to eliminate VRAM fragmentation.
+
+### 🛡️ Preserved SteelTemple Custom Architecture
+- **NVIDIA DLSS Neural Rendering (DLSS-NR Preset B):** Full Pre-SR multipass AI surface reconstruction (`dlss_nr_passes = 1|2|3|4`, `dlss_nr_scale`, `dlss_nr_color`).
+- **Hardened Multi-Frame Generation:** DLSS FG 2x/4x/6x (with Blackwell RTX 50 Series support), AMD FSR 3.1 & FSR 4 AI FG, and Intel XeFG.
+- **Ultra-Low Latency Ecosystem:** NVIDIA Reflex + Boost, AMD Anti-Lag 2 (`VK_AMD_anti_lag`), and Intel XeLL.
+- **Custom Ambient Occlusion Suite:** Intel XeGTAO (Ground Truth AO), HBAO, and SSAO alongside native lighting.
+- **Sony / Nixxes Standalone Launcher:** High-DPI Zonai UI with Mod Manager, GameBanana 1-click browser, Save Backup Vault, and Profile Manager.
+- **DualSense Controller Suite:** 4-channel haptics and hardware adaptive triggers.
 
 ---
 

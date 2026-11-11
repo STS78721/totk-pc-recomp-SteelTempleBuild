@@ -55,10 +55,10 @@ Our goal is not just to run the game on PC—it is to **elevate *Tears of the Ki
 
 ## 📥 Quick Start & Downloads
 
-Grab the latest prebuilt packages from our **[Latest Release (Beta 6)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-6)**:
+Grab the latest prebuilt packages from our **[Latest Release (Beta 6.1)](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/tag/Beta-6.1)**:
 
 ### 🎮 1. New Players (Fresh Standalone Setup)
-👉 **Download: [`SteelTemple-TotK-Beta6-Portable-StandAlone.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-6/SteelTemple-TotK-Beta6-Portable-StandAlone.zip)** (~505 MB)
+👉 **Download: [`SteelTemple-TotK-Beta6.1-Portable-StandAlone.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-6.1/SteelTemple-TotK-Beta6.1-Portable-StandAlone.zip)** (~505 MB)
 1. Extract the archive into your chosen game folder (e.g. `C:\Games\TotK`).
    - *Includes `TotKLauncher.exe`, `totk.exe`, `SDL3.dll`, vendor upscalers (DLSS 4.5, DLSS-NR, XeSS, FSR), DualSense haptics, and aspect ratio patches.*
 2. Copy **both** your dumped **`exefs`** and **`romfs`** folders (from your legally owned 1.4.3 game dump) directly into this folder.
@@ -77,14 +77,14 @@ Grab the latest prebuilt packages from our **[Latest Release (Beta 6)](https://g
 ---
 
 ### ⚡ 2. Upgrading Existing Builds (Drop-in Update)
-👉 **Download: [`SteelTemple-TotK-Beta6-Update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-6/SteelTemple-TotK-Beta6-Update.zip)** (~117 MB)
+👉 **Download: [`SteelTemple-TotK-Beta6.1-Update.zip`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-6.1/SteelTemple-TotK-Beta6.1-Update.zip)** (~117 MB)
 1. Extract and overwrite files directly into your existing game directory.
 2. Preserves all your save files, custom `totk.ini` configuration, and mods.
 
 ---
 
 ### 🛠️ 3. Setup & Configuration Wizard (Companion Tool)
-👉 **Download: [`SteelTemple-TotK-Beta6-Full-Setup-Wizard.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-6/SteelTemple-TotK-Beta6-Full-Setup-Wizard.exe)** (~64 MB)
+👉 **Download: [`SteelTemple-TotK-Beta6.1-Full-Setup-Wizard.exe`](https://github.com/STS78721/totk-pc-recomp-SteelTempleBuild/releases/download/Beta-6.1/SteelTemple-TotK-Beta6.1-Full-Setup-Wizard.exe)** (~64 MB)
 - Interactive Windows wizard providing 1-click Desktop shortcut creation, emulator save migration (Yuzu, Ryujinx), and controller UI prompt selection.
 
 ---
