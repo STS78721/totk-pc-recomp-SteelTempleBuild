@@ -145,6 +145,10 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_RANGE_DESC] = "Moves the steps where shadows turn softer (the game's 20, 40, 80 and 160 m) further "
                                   "away. Spreads the shadow map over more ground: raise Shadow resolution with it. "
                                   "Takes effect at the next start.",
+    [UI_MENU_GRASS_RANGE] = "Grass range",
+    [UI_MENU_GRASS_RANGE_DESC] = "How far around the camera grass grows (the game's: 62.5 m). Higher keeps the "
+                                 "grass in meadows further out instead of growing it in just in front of you; lower "
+                                 "draws less of it. Takes effect at the next start.",
     [UI_MENU_DLAA] = "NVIDIA DLSS / DLAA",
     [UI_MENU_DLAA_DESC] = "NVIDIA DLSS for the 3D scene (NVIDIA RTX GPUs; " DLSS_FILE " next to " EXE_FILE "): smoother "
                           "edges and less shimmer. The HUD is not touched. The mode below sets the resolution it works "
@@ -286,8 +290,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_CHEATS] = "Cheats: %d. Switch them on the Cheats tab.",
     [UI_MENU_MODS_CHEATS_FILE] = "Cheats for this game version are read at start from cheats\\%s in this mod.",
     [UI_MENU_MODS_BAD_NAME] = "The folder name contains |, which the mod list uses between names. Rename the folder.",
-    [UI_MENU_MODS_OTHER_VERSION] = "%u of its files are made for another game version and are left out. Look for a "
-                                   "version of this mod made for your game version.",
+    [UI_MENU_MODS_OTHER_VERSION] = "%u of its files carry another game version in their names. The game reads them only "
+                                   "where something asks for those names. If the mod does nothing, look for a version "
+                                   "of it made for your game version.",
     [UI_MENU_MODS_UNUSED] = "not used",
     [UI_MENU_MODS_FPS60] = "60 FPS patch",
     [UI_MENU_MODS_FPS60_DESC] = "The port's own patch for 60 frames per second. Set it with Frame rate limit on the "
@@ -366,6 +371,10 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_MOUSE_DIRECT] = "Direct",
     [UI_MENU_MENU_CURSOR] = "Mouse in the game's menus",
     [UI_MENU_MENU_CURSOR_DESC] = "In the game's own menus (title, inventory, shops, dialogue choices) the pointer shows: the item under it is selected, left click confirms, right click goes back. Only after the mouse or a key was used last, so a gamepad sees the menus unchanged (game 1.4.3).",
+    [UI_MENU_MAP_CLICK] = "Left click on the map",
+    [UI_MENU_MAP_CLICK_DESC] = "On the Purah Pad's map, the left mouse button presses A at the map's cursor instead of the button it is bound to (Y by default). Needs Mouse in the game's menus (game 1.4.3).",
+    [UI_MENU_DIALOGUE_CLICK] = "Clicks in dialogue",
+    [UI_MENU_DIALOGUE_CLICK_DESC] = "While a dialogue box is open, left click presses B (it continues the text and skips its scroll) and right click presses A, instead of the buttons they are bound to (Y by default, which opens the dialogue log, and ZL). Dialogue choices keep the pointer: left click picks (game 1.4.3).",
     [UI_MENU_MOUSE_SENS] = "Mouse camera sensitivity",
     [UI_MENU_MOUSE_SENS_DESC] = "How fast the mouse turns the camera.",
     [UI_MENU_WALK_KEY] = "Walk key",
@@ -707,6 +716,10 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_RANGE_DESC] = "Отодвигает границы, за которыми тени становятся мягче (в игре 20, 40, 80 и 160 м). "
                                   "Карта теней растягивается на большую площадь, поэтому вместе с этим поднимайте "
                                   "разрешение теней. Действует после перезапуска.",
+    [UI_MENU_GRASS_RANGE] = "Дальность травы",
+    [UI_MENU_GRASS_RANGE_DESC] = "Как далеко вокруг камеры растёт трава (в игре 62,5 м). Выше: трава на лугах видна "
+                                 "дальше и не вырастает прямо перед вами; ниже: травы меньше. Действует после "
+                                 "перезапуска.",
     [UI_MENU_DLAA] = "NVIDIA DLSS / DLAA",
     [UI_MENU_DLAA_DESC] = "NVIDIA DLSS для 3D-сцены (видеокарты NVIDIA RTX; " DLSS_FILE " рядом с " EXE_FILE "): ровнее "
                           "края и меньше мерцания. Интерфейс не затрагивается. Режим ниже задаёт разрешение, с которым он "
@@ -787,8 +800,9 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_CHEATS] = "Читов: %d. Они включаются на вкладке «Читы».",
     [UI_MENU_MODS_CHEATS_FILE] = "Читы для этой версии игры читаются при запуске из cheats\\%s в этом моде.",
     [UI_MENU_MODS_BAD_NAME] = "В имени папки есть символ |, которым список модов разделяет имена. Переименуйте папку.",
-    [UI_MENU_MODS_OTHER_VERSION] = "Файлов для другой версии игры: %u, они пропущены. Поищите версию этого мода для "
-                                   "вашей версии игры.",
+    [UI_MENU_MODS_OTHER_VERSION] = "Файлов с другой версией игры в имени: %u. Игра читает их, только когда что-то "
+                                   "запрашивает эти имена. Если мод не работает, поищите его версию для вашей версии "
+                                   "игры.",
     [UI_MENU_MODS_UNUSED] = "не используется",
     [UI_MENU_MODS_FPS60] = "Патч 60 FPS",
     [UI_MENU_MODS_FPS60_DESC] = "Собственный патч порта для 60 кадров в секунду. Настраивается «Ограничением частоты "
@@ -853,6 +867,10 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_MOUSE_DIRECT] = "Прямое",
     [UI_MENU_MENU_CURSOR] = "Мышь в меню игры",
     [UI_MENU_MENU_CURSOR_DESC] = "В меню самой игры (заставка, инвентарь, магазины, варианты ответа) появляется указатель: пункт под ним выбирается, левый щелчок подтверждает, правый возвращает назад. Только если последними использовались мышь или клавиатура, поэтому с геймпадом меню не меняются (версия игры 1.4.3).",
+    [UI_MENU_MAP_CLICK] = "Левый щелчок на карте",
+    [UI_MENU_MAP_CLICK_DESC] = "На карте игры левая кнопка мыши нажимает A у курсора карты, а не назначенную ей кнопку (по умолчанию Y). Нужна «Мышь в меню игры» (версия игры 1.4.3).",
+    [UI_MENU_DIALOGUE_CLICK] = "Щелчки в диалоге",
+    [UI_MENU_DIALOGUE_CLICK_DESC] = "Пока открыто окно диалога, левый щелчок нажимает B (продолжает текст и пропускает его прокрутку), а правый — A, вместо назначенных им кнопок (по умолчанию Y, она открывает журнал диалога, и ZL). В вариантах ответа по-прежнему работает указатель: левый щелчок выбирает (версия игры 1.4.3).",
     [UI_MENU_MOUSE_SENS] = "Чувствительность мыши",
     [UI_MENU_MOUSE_SENS_DESC] = "Как быстро мышь поворачивает камеру.",
     [UI_MENU_WALK_KEY] = "Клавиша шага",
@@ -1119,8 +1137,9 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_CHEATS] = "Cheats: %d. Ligue-os na aba Cheats.",
     [UI_MENU_MODS_CHEATS_FILE] = "Os cheats desta versão do jogo são lidos ao iniciar de cheats\\%s neste mod.",
     [UI_MENU_MODS_BAD_NAME] = "O nome da pasta contém |, que a lista de mods usa entre os nomes. Renomeie a pasta.",
-    [UI_MENU_MODS_OTHER_VERSION] = "%u dos seus arquivos são de outra versão do jogo e ficam de fora. Procure uma versão "
-                                   "deste mod feita para a sua versão do jogo.",
+    [UI_MENU_MODS_OTHER_VERSION] = "%u dos seus arquivos trazem outra versão do jogo no nome. O jogo só os lê quando algo "
+                                   "pede esses nomes. Se o mod não fizer nada, procure uma versão dele feita para a sua "
+                                   "versão do jogo.",
     [UI_MENU_MODS_UNUSED] = "não usado",
     [UI_MENU_MODS_FPS60] = "Patch de 60 FPS",
     [UI_MENU_MODS_FPS60_DESC] = "O patch do próprio port para 60 quadros por segundo. Ajuste em Limite de quadros na aba "
@@ -1508,6 +1527,10 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_MOUSE_DIRECT] = "Direta",
     [UI_MENU_MENU_CURSOR] = "Mouse nos menus do jogo",
     [UI_MENU_MENU_CURSOR_DESC] = "Nos menus do próprio jogo (título, inventário, lojas, escolhas de diálogo) o ponteiro aparece: o item sob ele fica selecionado, o clique esquerdo confirma e o direito volta. Só depois de usar o mouse ou uma tecla por último, então com um controle os menus ficam como antes (jogo 1.4.3).",
+    [UI_MENU_MAP_CLICK] = "Clique esquerdo no mapa",
+    [UI_MENU_MAP_CLICK_DESC] = "No mapa do jogo, o botão esquerdo do mouse aperta A no cursor do mapa, em vez do botão ao qual está atribuído (Y por padrão). Requer Mouse nos menus do jogo (jogo 1.4.3).",
+    [UI_MENU_DIALOGUE_CLICK] = "Cliques no diálogo",
+    [UI_MENU_DIALOGUE_CLICK_DESC] = "Enquanto uma caixa de diálogo está aberta, o clique esquerdo aperta B (continua o texto e pula a rolagem) e o direito aperta A, em vez dos botões aos quais estão atribuídos (Y por padrão, que abre o registro do diálogo, e ZL). As escolhas de diálogo continuam com o ponteiro: o clique esquerdo escolhe (jogo 1.4.3).",
     [UI_MENU_PROMPTS_MISSING] = "faltam os arquivos dos ícones: execute a instalação de novo",
     [UI_MENU_PROMPTS_FAILED] = "arquivos dos ícones danificados: execute a instalação de novo",
     [UI_MENU_PROMPTS_RESTART] = "os ícones mudam após reiniciar",
@@ -1543,6 +1566,10 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_RANGE_DESC] = "Afasta os degraus em que as sombras ficam mais suaves (20, 40, 80 e 160 m no "
                                   "jogo). Espalha o mapa de sombras por mais terreno: aumente a Resolução das sombras "
                                   "junto. Vale no próximo início.",
+    [UI_MENU_GRASS_RANGE] = "Alcance da grama",
+    [UI_MENU_GRASS_RANGE_DESC] = "Até onde a grama cresce ao redor da câmera (62,5 m no jogo). Mais alto mantém a "
+                                 "grama dos campos mais longe em vez de ela surgir logo à sua frente; mais baixo "
+                                 "desenha menos grama. Vale no próximo início.",
     [UI_MENU_CONTACT_SHADOWS] = "Sombras de contato",
     [UI_MENU_CONTACT_SHADOWS_DESC] = "Pequenas sombras do sol que os mapas de sombra não pegam: nos pés, sob pedras, "
                                      "na grama e em dobras. Traçadas na tela depois da iluminação. Vale no próximo "
@@ -1649,7 +1676,8 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_CHEATS] = "金手指：%d 个。在“金手指”标签页中开关。",
     [UI_MENU_MODS_CHEATS_FILE] = "此游戏版本的金手指在启动时从此模组的 cheats\\%s 读取。",
     [UI_MENU_MODS_BAD_NAME] = "文件夹名称含有 |，模组列表用它分隔名称。请重命名该文件夹。",
-    [UI_MENU_MODS_OTHER_VERSION] = "它有 %u 个文件是为其他游戏版本制作的，已被跳过。请寻找适用于你的游戏版本的此模组。",
+    [UI_MENU_MODS_OTHER_VERSION] = "它有 %u 个文件的文件名带有其他游戏版本号。只有在有内容请求这些文件名时，游戏才会读取它们。"
+                                   "如果模组不起作用，请寻找适用于你的游戏版本的此模组。",
     [UI_MENU_MODS_UNUSED] = "未使用",
     [UI_MENU_MODS_FPS60] = "60 FPS 补丁",
     [UI_MENU_MODS_FPS60_DESC] = "移植版自带的 60 帧补丁。在“游戏”页的帧率上限中设置。",
@@ -2144,6 +2172,10 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_MOUSE_DIRECT] = "直接",
     [UI_MENU_MENU_CURSOR] = "在游戏菜单中使用鼠标",
     [UI_MENU_MENU_CURSOR_DESC] = "在游戏自身的菜单中（标题、背包、商店、对话选项）显示指针：指针下的项目被选中，左键确认，右键返回。仅在最后使用的是鼠标或键盘时生效，因此使用手柄时菜单保持不变（游戏 1.4.3）。",
+    [UI_MENU_MAP_CLICK] = "在地图上左键单击",
+    [UI_MENU_MAP_CLICK_DESC] = "在游戏地图上，鼠标左键在地图光标处按下 A 键，而不是按下它所绑定的按键（默认为 Y）。需要开启“在游戏菜单中使用鼠标”（游戏 1.4.3）。",
+    [UI_MENU_DIALOGUE_CLICK] = "对话中的鼠标点击",
+    [UI_MENU_DIALOGUE_CLICK_DESC] = "对话框打开时，鼠标左键按下 B 键（继续对话并跳过文字滚动），右键按下 A 键，而不是它们所绑定的按键（默认为 Y，会打开对话记录；以及 ZL）。对话选项仍使用指针：左键选择（游戏 1.4.3）。",
     [UI_MENU_PROMPTS_MISSING] = "缺少按键提示文件：请重新运行安装程序",
     [UI_MENU_PROMPTS_FAILED] = "按键提示文件已损坏：请重新运行安装程序",
     [UI_MENU_PROMPTS_RESTART] = "按键提示重启后生效",
@@ -2169,6 +2201,8 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_SHADOW_SCALE_DESC] = "将太阳阴影贴图的每条边绘制为游戏 960x960 的若干倍：阴影边缘和树叶阴影更清晰。下次启动时生效。",
     [UI_MENU_SHADOW_RANGE] = "阴影级联范围",
     [UI_MENU_SHADOW_RANGE_DESC] = "把阴影变柔和的分界（游戏中为 20、40、80 和 160 米）推得更远。阴影贴图会覆盖更大的地面，请同时提高阴影分辨率。下次启动时生效。",
+    [UI_MENU_GRASS_RANGE] = "草地范围",
+    [UI_MENU_GRASS_RANGE_DESC] = "镜头周围长草的距离（游戏中为 62.5 米）。调高后草地延伸得更远，不会在你面前才长出来；调低则少画一些草。下次启动时生效。",
     [UI_MENU_CONTACT_SHADOWS] = "接触阴影",
     [UI_MENU_CONTACT_SHADOWS_DESC] = "阴影贴图遗漏的细小太阳阴影：脚下、石头下、草丛和褶皱中。在光照之后于屏幕空间追踪。下次启动时生效。",
     [UI_MENU_PCSS] = "柔和阴影",
@@ -2195,6 +2229,11 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_DLSS_CHARS_FULL] = "强",
     [UI_MENU_FXAA] = "游戏抗锯齿（FXAA）",
     [UI_MENU_FXAA_DESC] = "游戏自身的 FXAA 边缘平滑。会让细节略微模糊；开启 DLAA 时不需要。",
+    [UI_MENU_REFLEX] = "NVIDIA Reflex 低延迟",
+    [UI_MENU_REFLEX_DESC] = "在支持 VK_NV_low_latency2 的 NVIDIA 显卡上降低系统延迟。开 + 增强 (On + Boost) 会在 CPU 瓶颈时保持 GPU 高频率。",
+    [UI_MENU_REFLEX_OFF] = "关",
+    [UI_MENU_REFLEX_ON] = "开",
+    [UI_MENU_REFLEX_BOOST] = "开 + 增强",
     [UI_MENU_TAB_CHEATS] = "金手指",
     [UI_MENU_CHEATS_NONE] = "此游戏版本没有金手指。模组的金手指是它的 cheats 文件夹中以游戏构建命名的 Atmosphere "
                             "金手指文件：mods\\<模组>\\cheats\\%s。重启游戏后才会读取。对于修改游戏代码的金手指，"

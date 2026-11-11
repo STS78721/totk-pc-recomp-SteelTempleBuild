@@ -53,6 +53,7 @@ typedef enum {
     UI_MENU_HDR_UI, UI_MENU_HDR_UI_DESC, UI_MENU_HDR_HUE, UI_MENU_HDR_HUE_DESC,
     UI_MENU_SHADOW_SCALE, UI_MENU_SHADOW_SCALE_DESC,
     UI_MENU_SHADOW_RANGE, UI_MENU_SHADOW_RANGE_DESC,
+    UI_MENU_GRASS_RANGE, UI_MENU_GRASS_RANGE_DESC,
     UI_MENU_AO_MODE, UI_MENU_AO_MODE_DESC,
     UI_MENU_CONTACT_SHADOWS, UI_MENU_CONTACT_SHADOWS_DESC,
     UI_MENU_PCSS, UI_MENU_PCSS_DESC,
@@ -101,7 +102,7 @@ typedef enum {
     UI_MENU_MODS_EXEFS_OTHER,
     UI_MENU_MODS_EXEFS_ON,           // printf: its ExeFS patch files in use
     UI_MENU_MODS_REPLACES_BUILTIN,   // printf: its ExeFS patch files in use, the port's own patch sets they turn off
-    UI_MENU_MODS_OTHER_VERSION,  // printf: files made for another game version, left out
+    UI_MENU_MODS_OTHER_VERSION,  // printf: files named for another game version, read only when asked for by name
     UI_MENU_MODS_UNUSED,         // under the switch of a mod the port cannot use
     UI_MENU_MODS_CHEATS,         // printf: its cheats as read at start
     UI_MENU_MODS_CHEATS_FILE,    // printf: <build id>.txt, when none were read
@@ -136,6 +137,8 @@ typedef enum {
     UI_MENU_STICK_DEADZONE_NOW, UI_MENU_STICK_SENS, UI_MENU_STICK_SENS_DESC,
     UI_MENU_MOUSE_MODE, UI_MENU_MOUSE_MODE_DESC, UI_MENU_MOUSE_STICK, UI_MENU_MOUSE_DIRECT,
     UI_MENU_MENU_CURSOR, UI_MENU_MENU_CURSOR_DESC,
+    UI_MENU_MAP_CLICK, UI_MENU_MAP_CLICK_DESC,
+    UI_MENU_DIALOGUE_CLICK, UI_MENU_DIALOGUE_CLICK_DESC,
     UI_MENU_MOUSE_SENS, UI_MENU_MOUSE_SENS_DESC,
     UI_MENU_WALK_KEY, UI_MENU_WALK_KEY_DESC, UI_MENU_WALK_KEY_TAKEN, UI_MENU_WALK_SCALE, UI_MENU_WALK_SCALE_DESC,
 

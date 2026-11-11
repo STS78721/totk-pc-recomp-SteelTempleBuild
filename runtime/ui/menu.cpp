@@ -783,10 +783,18 @@ static void row_shadow_range(void) {
     opt_choice_list("TOTK_SHADOW_RANGE", UI_MENU_SHADOW_RANGE, vals, names, 4, UI_MENU_SHADOW_RANGE_DESC);
 }
 
+static void row_grass_range(void) {
+    static const char *const vals[] = {"50", "100", "150", "200", "300", "400"};
+    static const char *const names[] = {"31 m (0.5x)", "62 m (1x)",  "94 m (1.5x)",
+                                        "125 m (2x)",  "188 m (3x)", "250 m (4x)"};
+    opt_choice_list("TOTK_GRASS_RANGE", UI_MENU_GRASS_RANGE, vals, names, 6, UI_MENU_GRASS_RANGE_DESC);
+}
+
 static void rows_ao(void) {
     static const char *const vals[] = {"native", "ssao", "hbao", "xegtao", "off"};
     static const char *const names[] = {"Native AO (Default)", "SSAO (Enhanced)", "HBAO (Horizon-Based)", "Intel XeGTAO (Ground Truth)", "Off"};
     opt_choice_list("TOTK_AO_MODE", UI_MENU_AO_MODE, vals, names, 5, UI_MENU_AO_MODE_DESC);
+}
 }
 
 static void row_gpu(void) {
@@ -924,6 +932,7 @@ static void tab_screen(float scale) {
     row_shadow_res();
     row_shadow_scale();
     row_shadow_range();
+    row_grass_range();
     opt_slider("TOTK_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
     opt_slider("TOTK_CONTACT_SHADOWS", UI_MENU_CONTACT_SHADOWS, 0, 100, UI_MENU_CONTACT_SHADOWS_DESC, 10, "%.0f %%");
     rows_ao();
@@ -1241,6 +1250,8 @@ static void tab_controls(float scale) {
     opt_choice("TOTK_MOUSE_MODE", UI_MENU_MOUSE_MODE, mouse_modes, 2, UI_MENU_MOUSE_MODE_DESC);
     opt_slider("TOTK_MOUSE_SENS", UI_MENU_MOUSE_SENS, 0, 10, UI_MENU_MOUSE_SENS_DESC, 0.1f, "%.1f");
     opt_toggle("TOTK_MENU_CURSOR", UI_MENU_MENU_CURSOR, UI_MENU_MENU_CURSOR_DESC);
+    opt_toggle("TOTK_MAP_CLICK", UI_MENU_MAP_CLICK, UI_MENU_MAP_CLICK_DESC);
+    opt_toggle("TOTK_DIALOGUE_CLICK", UI_MENU_DIALOGUE_CLICK, UI_MENU_DIALOGUE_CLICK_DESC);
     row_walk_key();
     opt_slider("TOTK_WALK_SCALE", UI_MENU_WALK_SCALE, 0.2f, 0.9f, UI_MENU_WALK_SCALE_DESC, 0.01f, "%.2f");
     // Analog sticks: one dead zone row per stick, falling back to TOTK_STICK_DEADZONE (both sticks) while unset. With
