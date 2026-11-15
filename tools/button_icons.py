@@ -234,7 +234,7 @@ def ps_icons(g, style='dualsense', by_position=False):
 
     def ps_triangle(advance=640):
         def draw(pen):
-            cx, tcy = advance / 2, CY - R * 0.08
+            cx, tcy = advance / 2, CY
             r1, r2, k = R * 0.64, R * 0.24, 0.8660254
             circle(pen, cx, CY, R)
             polygon(ReverseContourPen(pen), [(cx, tcy + r1), (cx - r1 * k, tcy - r1 * 0.5), (cx + r1 * k, tcy - r1 * 0.5)])

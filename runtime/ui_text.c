@@ -173,20 +173,21 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_DLSS_DLAA] = "DLAA (native)", [UI_MENU_DLSS_QUALITY] = "Quality", [UI_MENU_DLSS_BALANCED] = "Balanced",
     [UI_MENU_DLSS_PERFORMANCE] = "Performance", [UI_MENU_DLSS_ULTRA] = "Ultra Performance",
     [UI_MENU_UPSCALE_PRESET] = "Upscaler quality preset",
-    [UI_MENU_UPSCALE_PRESET_DESC] = "Picks the 3D render scale for the upscaler (DLSS or AMD FSR): Quality 67 %, Balanced 58 %, "
-                                    "Performance 50 %, Ultra Performance 33 %, Native 100 %. It sets the DLSS mode and the 3D render "
-                                    "scale together. Takes effect after a restart.",
+    [UI_MENU_UPSCALE_PRESET_DESC] = "Picks the 3D render scale for the upscaler (DLSS, Intel XeSS, or AMD FSR): Quality 67 %, "
+                                    "Balanced 58 %, Performance 50 %, Ultra Performance 33 %, Native 100 %. Changes apply at restart "
+                                    "without overriding your chosen DLSS model generation.",
     [UI_MENU_DLSS_MODEL] = "DLSS model",
-    [UI_MENU_DLSS_MODEL_DESC] = "Selects the neural model generation and preset. DLSS 4 (Preset K / J) is tuned for "
-                                "Native / Quality / Balanced; DLSS 4.5 (Preset M / L) is tuned for Performance (50 %) "
-                                "and Ultra Performance (33 %); DLSS 3 (Preset E / C) uses CNN. Quality presets guide "
-                                "this choice automatically, or you can override it manually at any time.",
+    [UI_MENU_DLSS_MODEL_DESC] = "Selects the NVIDIA DLSS model generation and automatically uses NVIDIA's industry-standard "
+                                "recommended preset for your chosen resolution scale. CNN (DLSS 3) uses Preset E (Quality/Balanced/Performance) "
+                                "and Preset F (DLAA/Ultra Performance) on all RTX GPUs. Transformer Gen 1 (DLSS 4) uses Preset K on all "
+                                "scales and RTX GPUs. Transformer Gen 2 (DLSS 4.5) uses Preset M (DLAA..Performance) and Preset L (Ultra "
+                                "Performance) and requires FP8 Tensor Cores (RTX 40/50 Series; falls back to Gen 1 Preset K on RTX 20/30). "
+                                "Applies at once.",
     [UI_MENU_FG_MODE] = "Frame Generation",
     [UI_MENU_FG_MODE_DESC] = "Generates interpolated frames between rendered frames to multiply smoothness. "
-                             "NVIDIA DLSS Frame Gen supports Presets A / B / C and automatically enables NVIDIA Reflex "
-                             "(On + Boost). AMD FSR 3.1 Frame Gen works on all GPUs and pairs with AMD Anti-Lag 2. "
-                             "AMD FSR 4 AI Frame Gen uses RDNA 4 neural optical flow (requires AMD Radeon RX 9000 Series GPU) "
-                             "and automatically enables AMD Anti-Lag 2.",
+                             "NVIDIA DLSS Frame Gen requires RTX 40/50 Series Optical Flow and pairs with NVIDIA Reflex "
+                             "(On + Boost). Intel XeFG supports up to 4x with libxess_fg.dll. AMD FSR 3.1 Frame Gen works "
+                             "on all GPUs and pairs with AMD Anti-Lag 2. AMD FSR 4 AI Frame Gen requires AMD Radeon RX 9000 Series.",
     [UI_MENU_FG_PRESET] = "DLSS Frame Gen preset",
     [UI_MENU_FG_PRESET_DESC] = "Selects the NVIDIA DLSS Frame Generation neural profile: Preset A (Transformer optical "
                                "flow, sharpest HUD & motion stability), Preset B (Balanced optical flow for fast camera "
@@ -605,6 +606,15 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_EXEFS_ON] = "Code patches in use: %d files.",
     [UI_MENU_MODS_REPLACES_BUILTIN] = "Code patches in use: %d files. They replace the port's own patch %s, which "
                                       "stays off while this mod is on.",
+    [UI_MENU_MENU_THEME] = "Menu theme",
+    [UI_MENU_MENU_THEME_DESC] = "Appearance of the settings menu: Tears of the Kingdom (Zonai/Hylian styling), Dark, or Light.",
+    [UI_MENU_THEME_TOTK] = "Tears of the Kingdom",
+    [UI_MENU_THEME_DARK] = "Dark",
+    [UI_MENU_THEME_LIGHT] = "Light",
+    [UI_MENU_TOUCHPAD_MENU] = "PS4/PS5 touchpad menu toggle",
+    [UI_MENU_TOUCHPAD_MENU_DESC] = "Pressing the PlayStation DualSense (PS5) or DualShock 4 (PS4) touchpad opens or closes this settings menu.",
+    [UI_MENU_HINT_SELECT] = "Select",
+    [UI_MENU_HINT_BACK] = "Back",
 };
 
 static const char *const text_ru[UI_TEXT_COUNT] = {
@@ -1106,6 +1116,15 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_EXEFS_ON] = "Патчи кода в работе: файлов: %d.",
     [UI_MENU_MODS_REPLACES_BUILTIN] = "Патчи кода в работе: файлов: %d. Они заменяют собственный патч порта %s, "
                                       "который выключен, пока этот мод включён.",
+    [UI_MENU_MENU_THEME] = "Тема меню",
+    [UI_MENU_MENU_THEME_DESC] = "Оформление меню настроек: особая тема Tears of the Kingdom, Тёмная или Светлая.",
+    [UI_MENU_THEME_TOTK] = "Tears of the Kingdom",
+    [UI_MENU_THEME_DARK] = "Тёмная",
+    [UI_MENU_THEME_LIGHT] = "Светлая",
+    [UI_MENU_TOUCHPAD_MENU] = "Сенсорная панель PS4/PS5",
+    [UI_MENU_TOUCHPAD_MENU_DESC] = "Нажатие на сенсорную панель DualSense (PS5) или DualShock 4 (PS4) открывает и закрывает это меню.",
+    [UI_MENU_HINT_SELECT] = "Выбрать",
+    [UI_MENU_HINT_BACK] = "Назад",
 };
 
 static const char *const text_pt_br[UI_TEXT_COUNT] = {
@@ -1640,6 +1659,15 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_EXEFS_ON] = "Patches de código em uso: %d arquivos.",
     [UI_MENU_MODS_REPLACES_BUILTIN] = "Patches de código em uso: %d arquivos. Eles substituem o patch do próprio port "
                                       "%s, que fica desligado enquanto este mod está ligado.",
+    [UI_MENU_MENU_THEME] = "Tema do menu",
+    [UI_MENU_MENU_THEME_DESC] = "Aparência do menu de configurações: tema Tears of the Kingdom, Escuro ou Claro.",
+    [UI_MENU_THEME_TOTK] = "Tears of the Kingdom",
+    [UI_MENU_THEME_DARK] = "Escuro",
+    [UI_MENU_THEME_LIGHT] = "Claro",
+    [UI_MENU_TOUCHPAD_MENU] = "Touchpad PS4/PS5 abre o menu",
+    [UI_MENU_TOUCHPAD_MENU_DESC] = "Pressionar o touchpad do DualSense (PS5) ou DualShock 4 (PS4) abre ou fecha este menu de configurações.",
+    [UI_MENU_HINT_SELECT] = "Selecionar",
+    [UI_MENU_HINT_BACK] = "Voltar",
 };
 
 // Simplified Chinese: this row covers the software keyboard and the whole menu, so the menu and the overlay read Chinese
@@ -2256,6 +2284,15 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_EXEFS_OTHER] = "它的代码补丁（exefs）是为其他游戏版本制作的。",
     [UI_MENU_MODS_EXEFS_ON] = "正在使用的代码补丁：%d 个文件。",
     [UI_MENU_MODS_REPLACES_BUILTIN] = "正在使用的代码补丁：%d 个文件。它们取代本移植自带的补丁 %s，此模组开启时该补丁保持关闭。",
+    [UI_MENU_MENU_THEME] = "菜单主题",
+    [UI_MENU_MENU_THEME_DESC] = "设置菜单的外观主题：王国之泪（左纳乌/海拉鲁风格）、深色或浅色。",
+    [UI_MENU_THEME_TOTK] = "王国之泪",
+    [UI_MENU_THEME_DARK] = "深色",
+    [UI_MENU_THEME_LIGHT] = "浅色",
+    [UI_MENU_TOUCHPAD_MENU] = "PS4/PS5 触摸板开关菜单",
+    [UI_MENU_TOUCHPAD_MENU_DESC] = "按下 DualSense (PS5) 或 DualShock 4 (PS4) 手柄触摸板可打开或关闭本设置菜单。",
+    [UI_MENU_HINT_SELECT] = "选择",
+    [UI_MENU_HINT_BACK] = "返回",
 };
 
 #define SWKBD_ONLY(name, ...) static const char *const name[UI_TEXT_COUNT] = {SWKBD(__VA_ARGS__)}

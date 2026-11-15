@@ -308,6 +308,7 @@ void vk_dlaa_init(void) {
 }
 
 int vk_dlaa_available(void) { return vk_dlaa_wanted() && N.available; }
+int vk_dlaa_init_failed(void) { return N.tried && !N.available; }
 
 // ---------------------------------------------------------------- where DLAA runs in TotK's frame
 // Measured (TOTK_DUMP, frame 2100 at Lookout Landing, 2560x1440 scene): the G-buffer passes draw into five targets with
@@ -381,7 +382,8 @@ static struct {
     uint64_t mv_frames, mv_none, masked;   // masked: frames with the characters' bias mask
     uint64_t why[3];             // history resets: scene size changed, no camera, scene target changed
     int on;                      // the dlaa setting, read at each present (the menu switches it live)
-    int preset, preset_dirty;    // the DLSS model features are created with (preset_value); a change pending
+    int preset_dirty;            // a DLSS model change pending; features recreated next evaluate
+    char preset_cfg[32];         // active TOTK_DLSS_PRESET string when features were created
     VkExecTarget ids;            // this frame's G-buffer target 0 (object classes in green), valid with ids_ok
     int ids_ok;
     unsigned cfg_seen;           // cfg_version when preset was read
@@ -1023,13 +1025,15 @@ static void next_jitter(uint32_t w, uint32_t ow) {
     D.jit_ok = !D.hold && !nj;
 }
 
-// The DLSS model (TOTK_DLSS_PRESET, live): default takes NVIDIA's model per mode (evaluate: K for DLAA, Quality and
-// Balanced, M for Performance, L for Ultra Performance), 0 here. A letter a..m takes that model in every mode: k pins
-// K, j is the other transformer model, which NVIDIA describes as slightly less ghosting at the cost of extra flicker, e
-// the older CNN model, cheaper on slower RTX cards. The value is an NVSDK_NGX_DLSS_Hint_Render_Preset (1 A ... 13 M),
-// read when a feature is created; a change recreates the features (preset_check).
-static int preset_value(void) {
-    const char *v = cfg_get("TOTK_DLSS_PRESET");
+// The DLSS model generation (TOTK_DLSS_PRESET, live):
+//   - "cnn": NVIDIA DLSS 3 CNN model using industry-standard presets (Preset E for Quality/Balanced/Performance/UltraQuality,
+//            Preset F for DLAA and Ultra Performance; supported on all RTX GPUs).
+//   - "transformer_gen1": NVIDIA DLSS 4 Transformer Gen 1 (Preset K across all scales; supported on all RTX GPUs).
+//   - "transformer_gen2": NVIDIA DLSS 4.5 Transformer Gen 2 (Preset M for DLAA..Performance, Preset L for Ultra Performance;
+//                         requires FP8 Tensor Cores on RTX 40+ Series, otherwise gated cleanly to Transformer Gen 1 Preset K).
+// Legacy explicit letters ("preset_a".."preset_m", "a".."m") and "default" remain supported with the same FP8 gate on L/M.
+// The value is an NVSDK_NGX_DLSS_Hint_Render_Preset (1 A ... 13 M), read when a feature is created (preset_check).
+static int parse_explicit_letter(const char *v) {
     if (!v || !*v) return 0;
     if (!strncmp(v, "preset_", 7) && v[7] && !v[8]) {
         int c = v[7] | 0x20;
@@ -1037,6 +1041,54 @@ static int preset_value(void) {
     }
     int c = v[0] && !v[1] ? v[0] | 0x20 : 0;
     return c >= 'a' && c <= 'm' ? c - 'a' + 1 : 0;
+}
+
+const char *vk_dlaa_normalize_model(const char *cfg_str) {
+    if (!cfg_str || !*cfg_str) return "transformer_gen1";
+    if (!strcmp(cfg_str, "cnn")) return "cnn";
+    if (!strcmp(cfg_str, "transformer_gen1")) return "transformer_gen1";
+    if (!strcmp(cfg_str, "transformer_gen2")) return "transformer_gen2";
+    int letter = parse_explicit_letter(cfg_str);
+    if (letter >= 1 && letter <= 6) return "cnn";
+    if (letter >= 12 && letter <= 13) return "transformer_gen2";
+    return "transformer_gen1";
+}
+
+int vk_dlaa_resolve_preset(const char *cfg_str, int quality_val, char *out_gen, size_t gen_cap, int *out_gated) {
+    int gated = 0;
+    const char *gen = "Transformer Gen 1 (DLSS 4)";
+    int pr = 11;   // Preset K
+    int rtx40 = vk_gpu_is_rtx40_plus();
+    int letter = parse_explicit_letter(cfg_str);
+
+    if (letter > 0) {
+        if (letter >= 12 && !rtx40) {
+            pr = 11;
+            gated = 1;
+            gen = "Transformer Gen 1 (DLSS 4)";
+        } else {
+            pr = letter;
+            gen = letter <= 6 ? "CNN (DLSS 3)"
+                : letter <= 11 ? "Transformer Gen 1 (DLSS 4)"
+                               : "Transformer Gen 2 (DLSS 4.5)";
+        }
+    } else if (cfg_str && !strcmp(cfg_str, "cnn")) {
+        gen = "CNN (DLSS 3)";
+        pr = (quality_val == NGX_PERFQ_DLAA || quality_val == 3) ? 6 : 5;   // F for DLAA & UltraPerf, E for UQ/Q/B/P
+    } else if (cfg_str && !strcmp(cfg_str, "transformer_gen2")) {
+        if (!rtx40) {
+            pr = 11;
+            gated = 1;
+            gen = "Transformer Gen 1 (DLSS 4)";
+        } else {
+            gen = "Transformer Gen 2 (DLSS 4.5)";
+            pr = (quality_val == 3) ? 12 : 13;   // L for UltraPerf, M for DLAA..Performance
+        }
+    }
+
+    if (out_gen && gen_cap) snprintf(out_gen, gen_cap, "%s", gen);
+    if (out_gated) *out_gated = gated;
+    return pr;
 }
 
 // How strongly DLSS favours the current frame on characters and where they just were (TOTK_DLSS_CHAR_MASK, percent,
@@ -1054,6 +1106,18 @@ static int perf_quality(uint32_t w, uint32_t ow) {
     if (w >= ow) return NGX_PERFQ_DLAA;
     double k = (double)w / ow;
     return k >= 0.66 ? 2 : k >= 0.57 ? 1 : k >= 0.49 ? 0 : 3;
+}
+
+int vk_dlaa_ui_status(char *gen_buf, size_t gen_cap, char *preset_char_out, int *out_gated) {
+    unsigned o[2], s[2];
+    res_sizes(o, s);
+    int q = perf_quality(s[0], o[0]);
+    const char *cfg = cfg_value("TOTK_DLSS_PRESET");
+    int gated = 0;
+    int pr = vk_dlaa_resolve_preset(cfg, q, gen_buf, gen_cap, &gated);
+    if (preset_char_out) *preset_char_out = (char)('A' + pr - 1);
+    if (out_gated) *out_gated = gated;
+    return (!vk_gpu_is_nvidia() || vk_dlaa_init_failed()) ? 0 : pr;
 }
 
 // dst: the target DLSS's picture goes to, NULL for the light target itself (DLAA in place).
@@ -1151,26 +1215,33 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
         // IsHDR | MVLowRes | AutoExposure: linear scene light, motion vectors at the render size, no exposure texture
         p_seti(p, "DLSS.Feature.Create.Flags", (1 << 0) | (1 << 1) | (1 << 6));
         p_seti(p, "DLSS.Enable.Output.Subrects", 0);
-        // The model per mode (NVSDK_NGX_DLSS_Hint_Render_Preset: 1 A ... 11 K, 12 L, 13 M), as NVIDIA recommends for
-        // DLSS 4.5 (310.x): K (transformer) for DLAA, Quality and Balanced, M for Performance, L for Ultra Performance.
-        // M and L cost more on cards without FP8 (RTX 20/30). dlss_preset (D.preset, preset_check) takes one model for
-        // every mode instead.
-        int pk = D.preset ? D.preset : 11, pm = D.preset ? D.preset : 13, pl = D.preset ? D.preset : 12;
-        p_setu(p, "DLSS.Hint.Render.Preset.DLAA", (unsigned)pk);
-        p_setu(p, "DLSS.Hint.Render.Preset.UltraQuality", (unsigned)pk);
-        p_setu(p, "DLSS.Hint.Render.Preset.Quality", (unsigned)pk);
-        p_setu(p, "DLSS.Hint.Render.Preset.Balanced", (unsigned)pk);
-        p_setu(p, "DLSS.Hint.Render.Preset.Performance", (unsigned)pm);
-        p_setu(p, "DLSS.Hint.Render.Preset.UltraPerformance", (unsigned)pl);
+        if (!D.preset_cfg[0]) snprintf(D.preset_cfg, sizeof D.preset_cfg, "%s", cfg_value("TOTK_DLSS_PRESET"));
+        // Industry-standard NGX preset per resolution tier for the user's chosen model generation
+        // (with FP8 Tensor Core hardware gating on RTX 20/30 for Transformer Gen 2 Presets M/L).
+        static const struct { const char *key; int q; } hints[] = {
+            {"DLSS.Hint.Render.Preset.DLAA", NGX_PERFQ_DLAA},
+            {"DLSS.Hint.Render.Preset.UltraQuality", 4},
+            {"DLSS.Hint.Render.Preset.Quality", 2},
+            {"DLSS.Hint.Render.Preset.Balanced", 1},
+            {"DLSS.Hint.Render.Preset.Performance", 0},
+            {"DLSS.Hint.Render.Preset.UltraPerformance", 3},
+        };
+        for (size_t i = 0; i < sizeof hints / sizeof *hints; i++) {
+            int hp = vk_dlaa_resolve_preset(D.preset_cfg, hints[i].q, NULL, 0, NULL);
+            p_setu(p, hints[i].key, (unsigned)hp);
+        }
 
         NgxResult r = N.create(cb, NGX_FEATURE_SUPERSAMPLING, p, &e->feat);
         if (!NGX_OK(r) || !e->feat) {
             D.up = 0;
             return dl_fail("DLSS feature creation", r);
         }
-        int q = perf_quality(w, ow), pr = q == 0 ? pm : q == 3 ? pl : pk;
-        rt_log("dlaa: DLSS SuperSampling feature created (feat_id=1) at %ux%u -> %ux%u, quality value %d, preset %c (scene format %d, depth format %d)",
-               w, h, ow, oh, q, 'A' + pr - 1, (int)t->format, (int)z->format);
+        int q = perf_quality(w, ow), gated = 0;
+        char gen_name[48];
+        int pr = vk_dlaa_resolve_preset(D.preset_cfg, q, gen_name, sizeof gen_name, &gated);
+        rt_log("dlaa: DLSS SuperSampling feature created (feat_id=1) at %ux%u -> %ux%u, quality value %d, model %s, preset %c%s (scene format %d, depth format %d)",
+               w, h, ow, oh, q, gen_name, 'A' + pr - 1, gated ? " [FP8 GATED -> Gen 1]" : "",
+               (int)t->format, (int)z->format);
     }
     if (D.last_color != t->image) D.reset = 1, D.why[2]++, D.last_color = t->image;
     NgxResourceVK rc = res_image(cv, t->image, t->format, w, h, VK_IMAGE_ASPECT_COLOR_BIT, 0);
@@ -1451,18 +1522,24 @@ static void dlss_mode(void) {
 }
 
 
-// The preset, read again when a setting changed (the menu); a different one recreates the features at the next DLAA run.
+// The model selection, read again when a setting changed (the menu); a different one recreates the features at the next DLAA run.
 static void preset_check(void) {
     unsigned v = cfg_version();
     if (v == D.cfg_seen) return;
     D.cfg_seen = v;
-    int p = preset_value();
-    if (p == D.preset) return;
+    const char *cfg = cfg_value("TOTK_DLSS_PRESET");
+    if (!cfg || !*cfg) cfg = "transformer_gen1";
+    if (!strcmp(cfg, D.preset_cfg)) return;
+    snprintf(D.preset_cfg, sizeof D.preset_cfg, "%s", cfg);
     if (D.evals) {
-        if (p) rt_log("dlaa: DLSS preset %c in every mode; the features are created again", 'A' + p - 1);
-        else rt_log("dlaa: DLSS presets per mode; the features are created again");
+        char gen_name[48];
+        int gated = 0;
+        int pq = D.last ? perf_quality(D.last->w, D.last->ow) : NGX_PERFQ_DLAA;
+        int pr = vk_dlaa_resolve_preset(D.preset_cfg, pq, gen_name, sizeof gen_name, &gated);
+        rt_log("dlaa: DLSS model changed to %s (preset %c%s); recreating features",
+               gen_name, 'A' + pr - 1, gated ? ", FP8 gated" : "");
     }
-    D.preset = p, D.preset_dirty = 1, D.reset = 1;
+    D.preset_dirty = 1, D.reset = 1;
 }
 
 void vk_dlaa_frame(void) {

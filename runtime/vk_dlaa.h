@@ -1,5 +1,6 @@
 // DLAA (vk_dlaa.c): NVIDIA DLSS at the scene's own size, behind TOTK_DLAA (totk.ini dlaa = 1).
 #pragma once
+#include <stddef.h>
 #include "vk.h"
 
 // The narrowest scene the DLSS pass and the motion passes recognise by its D32F depth: Ultra Performance at a 1080p
@@ -7,6 +8,10 @@
 #define DLAA_SCENE_MIN_W 320u
 
 int vk_dlaa_wanted(void);   // the setting is on (the device may still lack DLSS)
+int vk_dlaa_init_failed(void);   // NGX init/caps were tried at startup and DLSS is unavailable
+const char *vk_dlaa_normalize_model(const char *cfg_str);
+int vk_dlaa_resolve_preset(const char *cfg_str, int quality_val, char *out_gen, size_t gen_cap, int *out_gated);
+int vk_dlaa_ui_status(char *gen_buf, size_t gen_cap, char *preset_char_out, int *out_gated);
 // vk_device.c: NGX's instance and device extensions join the lists (room for max names); vk_dlaa_init after the
 // device exists brings NGX up and checks that DLSS is available.
 void vk_dlaa_instance_exts(const char **ext, uint32_t *n, uint32_t max);

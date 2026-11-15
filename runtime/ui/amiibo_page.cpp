@@ -12,6 +12,7 @@
 
 #include "imgui.h"
 #include "ui/amiibo_page.h"
+#include "ui/menu_theme.h"
 #include "ui/option_rows.h"
 
 extern "C" {
@@ -163,7 +164,7 @@ void tab_amiibo(float scale) {
 
     // ---- Left Pane: Explorer & List ----
     ImGui::BeginChild("##amiibo_explorer", ImVec2(left_w, content_h), true);
-    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1.0f), "%s", menu_text(UI_MENU_AMIIBO_DIR));
+    ImGui::TextColored(totk_theme::v4(totk_theme::kAccentText), "%s", menu_text(UI_MENU_AMIIBO_DIR));
 
     ImGui::TextWrapped("%s", g_current_dir.c_str());
 
@@ -229,18 +230,19 @@ void tab_amiibo(float scale) {
 
     // ---- Right Pane: Controls & Status ----
     ImGui::BeginChild("##amiibo_controls", ImVec2(right_w, content_h), true);
-    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1.0f), "%s", menu_text(UI_MENU_AMIIBO_READER));
+    ImGui::TextColored(totk_theme::v4(totk_theme::kAccentText), "%s", menu_text(UI_MENU_AMIIBO_READER));
     ImGui::Separator();
 
     AmiiboDeviceState state = amiibo_get_reader_state();
     UiTextId state_id = UI_MENU_AMIIBO_STATE_IDLE;
-    ImVec4 state_col = ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
+    bool light = (totk_theme::g_active == totk_theme::THEME_LIGHT);
+    ImVec4 state_col = totk_theme::v4(totk_theme::kTextSoft);
     switch (state) {
     case AMIIBO_DEV_STATE_INITIALIZED: state_id = UI_MENU_AMIIBO_STATE_IDLE; break;
-    case AMIIBO_DEV_STATE_SEARCHING: state_id = UI_MENU_AMIIBO_STATE_SEARCHING; state_col = ImVec4(1.0f, 0.8f, 0.2f, 1.0f); break;
-    case AMIIBO_DEV_STATE_TAG_FOUND: state_id = UI_MENU_AMIIBO_STATE_FOUND; state_col = ImVec4(0.3f, 0.9f, 0.3f, 1.0f); break;
-    case AMIIBO_DEV_STATE_TAG_MOUNTED: state_id = UI_MENU_AMIIBO_STATE_MOUNTED; state_col = ImVec4(0.2f, 0.9f, 1.0f, 1.0f); break;
-    case AMIIBO_DEV_STATE_UNAVAILABLE: state_id = UI_MENU_AMIIBO_STATE_OFF; state_col = ImVec4(0.9f, 0.3f, 0.3f, 1.0f); break;
+    case AMIIBO_DEV_STATE_SEARCHING: state_id = UI_MENU_AMIIBO_STATE_SEARCHING; state_col = light ? ImVec4(0.75f, 0.48f, 0.0f, 1.0f) : ImVec4(1.0f, 0.8f, 0.2f, 1.0f); break;
+    case AMIIBO_DEV_STATE_TAG_FOUND: state_id = UI_MENU_AMIIBO_STATE_FOUND; state_col = light ? ImVec4(0.08f, 0.56f, 0.22f, 1.0f) : ImVec4(0.3f, 0.9f, 0.3f, 1.0f); break;
+    case AMIIBO_DEV_STATE_TAG_MOUNTED: state_id = UI_MENU_AMIIBO_STATE_MOUNTED; state_col = light ? ImVec4(0.0f, 0.52f, 0.68f, 1.0f) : ImVec4(0.2f, 0.9f, 1.0f, 1.0f); break;
+    case AMIIBO_DEV_STATE_UNAVAILABLE: state_id = UI_MENU_AMIIBO_STATE_OFF; state_col = light ? ImVec4(0.78f, 0.16f, 0.16f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f); break;
     default: break;
     }
     ImGui::TextUnformatted(menu_text(UI_MENU_AMIIBO_STATE));
@@ -251,7 +253,7 @@ void tab_amiibo(float scale) {
     ImGui::Separator();
     ImGui::TextUnformatted(menu_text(UI_MENU_AMIIBO_FILE));
     if (g_selected_entry >= 0 && g_selected_entry < (int)g_entries.size() && !g_entries[g_selected_entry].is_dir) {
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "%s", g_entries[g_selected_entry].name.c_str());
+        ImGui::TextColored(totk_theme::v4(totk_theme::kAccentText), "%s", g_entries[g_selected_entry].name.c_str());
 
         if (ImGui::Button(menu_text(UI_MENU_AMIIBO_TAP), ImVec2(ImGui::GetContentRegionAvail().x, 0)))
             tap(g_current_dir, g_entries[g_selected_entry].name);

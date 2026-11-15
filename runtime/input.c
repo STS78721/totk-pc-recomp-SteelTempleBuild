@@ -44,6 +44,7 @@ static unsigned pad_layout_seen;
 static volatile int32_t pad_layout_shown = -1;   // pad_layout for the menu (any thread), -1 without a gamepad
 static uint64_t pad_power_next;
 static int pad_power_percent = -1, pad_power_charging;
+static int touchpad_held;            // under lock: PS4/PS5 touchpad click state for rising-edge menu toggle
 static SDL_JoystickID sensor_pad;    // the gamepad whose sensors the motion thread set up, 0 none
 static int sensor_ok;                // ... and it has both sensors, enabled
 static int motion_thread;            // 0 not started, 1 running, -1 off (TOTK_MOTION=0, no SDL)
@@ -426,6 +427,7 @@ static void scan_pads(void) {
         dualsense_power_reset();
         SDL_CloseGamepad(pad); pad = NULL; sensor_pad = 0; sensor_ok = 0;
         pad_power_percent = -1; pad_power_charging = 0; pad_power_next = 0;
+        touchpad_held = 0;
         plat_xchg32(&pad_layout_shown, -1);
         for (int i = 0; i < 4; i++) plat_xchg32(&pad_labels[i], PAD_LABEL_NONE);
         rt_log("input: gamepad disconnected");
@@ -646,6 +648,17 @@ static void wheel_route(uint64_t *bp, int32_t sl[2], int32_t sr[2]) {
     else pick(&sl[0], &sl[1], 0, v);
 }
 
+static int pad_touchpad_edge(void) {
+    if (!pad || !SDL_GamepadConnected(pad) || !cfg_bool("TOTK_TOUCHPAD_MENU")) {
+        touchpad_held = 0;
+        return 0;
+    }
+    int down = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_TOUCHPAD) ? 1 : 0;
+    int edge = down && !touchpad_held;
+    touchpad_held = down;
+    return edge;
+}
+
 // Under lock, state 1: the open gamepad's inputs by position (pd[PAD_*] != 0 held); 0 without a connected gamepad.
 static int pad_physical(uint8_t pd[PAD_COUNT]) {
     if ((!pad || !SDL_GamepadConnected(pad)) && plat_now_ns() / 1000000u >= next_scan) { next_scan = plat_now_ns() / 1000000u + RESCAN_MS; scan_pads(); }
@@ -814,15 +827,17 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
     script_apply(&b, sl, sr);
     wheel_route(&b, sl, sr);
     rec_apply(b, sl, sr);
-    // Minus and Plus held together (gamepad or keys) open or close the menu and never reach the game
+    // Minus and Plus held together (gamepad or keys) open or close the menu and never reach the game.
+    // On PlayStation DualSense / DualShock 4, a touchpad click toggles the menu when TOTK_TOUCHPAD_MENU is on.
     static int combo_held;
     int32_t st[4] = {sl[0], sl[1], sr[0], sr[1]};
     int toggle = input_menu_gate(&combo_held, menu_is_open(), &b, st);
+    int touch_toggle = (state == 1 && !menu_is_open()) ? pad_touchpad_edge() : 0;
     static int overlay_held;   // L3+R3 step the performance overlay (F10)
     int overlay = input_overlay_gate(&overlay_held, &b);
     sl[0] = st[0], sl[1] = st[1], sr[0] = st[2], sr[1] = st[3];
     plat_mutex_unlock(&lock);
-    if (toggle) menu_toggle();
+    if (toggle || touch_toggle) menu_toggle();
     if (overlay) menu_perf_cycle();
     stick_bits(&b, sl[0], sl[1], B_SL_LEFT);
     stick_bits(&b, sr[0], sr[1], B_SR_LEFT);
@@ -906,6 +921,15 @@ int input_pad_read(uint64_t *buttons, int32_t *lx, int32_t *ly) {
     *lx = sl[0];
     *ly = sl[1];
     return ok;
+}
+
+int input_pad_touchpad_edge(void) {
+    int edge = 0;
+    plat_mutex_lock(&lock);
+    if (state == 1) edge = pad_touchpad_edge();
+    else touchpad_held = 0;
+    plat_mutex_unlock(&lock);
+    return edge;
 }
 
 uint16_t rumble_motor(float a, float curve, float strength) {

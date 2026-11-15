@@ -190,7 +190,7 @@
 # fsr (AMD FSR 1.0) or bilinear, and FSR's sharpening from 0 (off) to 100. Changes while the game runs take effect at once.
 # upscaler = fsr
 # upscaler_preset = quality
-# dlss_preset = preset_k
+# dlss_preset = transformer_gen1
 # sharpness = 80
 # NVIDIA Reflex low latency (VK_NV_low_latency2): off, on, or boost (keeps GPU clocks high during CPU-bound command replay).
 # reflex = off
@@ -278,11 +278,12 @@
 # to match). They apply only with dlaa = 1 and the DLSS model next to the executable; otherwise the scene follows
 # render_scale. Changes while the game runs take effect at once (1.4.3; 1.2.1 at the next start).
 # dlss = dlaa
-# The DLSS model: default (NVIDIA's advice per mode: K for dlaa, quality and balanced, M for performance, L for
-# ultra_performance), k (K in every mode) or j (the other transformer model: slightly less ghosting behind moving
-# characters, a little more flicker). Any other model by its letter, a to m: on slower RTX cards the older model e is
-# cheaper. Changes while the game runs take effect at once (DLSS starts a new history).
-# dlss_preset = default
+# The DLSS model generation: cnn (DLSS 3 CNN using NVIDIA's recommended presets per scale: E for Quality/Balanced/Performance,
+# F for DLAA/Ultra Performance; all RTX GPUs), transformer_gen1 (DLSS 4 Transformer Gen 1: Preset K across all scales;
+# all RTX GPUs), or transformer_gen2 (DLSS 4.5 Transformer Gen 2: Preset M for DLAA..Performance, Preset L for Ultra
+# Performance; requires FP8 Tensor Cores on RTX 40/50 Series and safely gates to Transformer Gen 1 Preset K on RTX 20/30).
+# Legacy explicit letters (preset_a..preset_m) also remain accepted. Changes while the game runs take effect at once.
+# dlss_preset = transformer_gen1
 # Per-object motion vectors for DLSS: characters, animals and moving objects get their own motion instead of the
 # camera's, so DLSS keeps their history instead of smearing or rejecting it. Costs some CPU time each frame (about 1-2 ms
 # on a laptop CPU); 0 leaves camera-only motion. Read at start.
@@ -320,6 +321,8 @@
 # Language of the settings menu and the overlay: en, ru, pt-BR or zh-Hans. Default: the Windows display language, English if
 # it is none of them.
 # menu_lang = en
+# Visual theme of the settings menu (F1): totk (custom Tears of the Kingdom Zonai/Hylian theme), dark, or light.
+# menu_theme = totk
 
 [discord]
 # Rich Presence: "Playing TotK Recomp" with the play time in your Discord status while the game runs, through the
@@ -373,6 +376,9 @@
 # E, Shift, Space, left click, Q, R, right click, F, Tab, M, 1 to 4, W A S D, Ctrl, C, and the mouse for the right
 # stick, whatever pad_layout). Read at start.
 # prompts = nintendo
+# PlayStation 4 / PlayStation 5 touchpad click: 1 lets pressing the DualSense / DualShock 4 touchpad open or close
+# the in-game settings menu (same as F1 / Minus+Plus).
+# touchpad_menu = 1
 # Gamepad stick dead zone in percent of full deflection (0 to 50). Raise it for a stick that drifts: inside the circle
 # the stick reads centred, and the rest of its travel is scaled to start there.
 # stick_deadzone = 8

@@ -26,6 +26,7 @@
 #include "platform/platform.h"
 #include "ui/menu.h"
 #include "vk.h"
+#include "vk_xess.h"
 
 #define FRAMES 2
 #define MAX_IMAGES 16
@@ -551,15 +552,25 @@ static void fg_apply_locked(void) {
     if (!strcmp(mode, "fsr4_fg") && !c->gpu_is_rx9000) {
         eff_mode = "fsr3_fg";
         hw_gate = "GATED (FSR 4 AI FG requires AMD Radeon RX 9000 Series -> fallback FSR 3.1 FG)";
-    } else if (!strcmp(mode, "dlss_fg") && !c->gpu_is_nvidia) {
+    } else if (!strcmp(mode, "dlss_fg") && !c->gpu_is_rtx40_plus) {
         eff_mode = "fsr3_fg";
-        hw_gate = "GATED (DLSS FG requires NVIDIA RTX GPU -> fallback FSR 3.1 FG)";
+        hw_gate = !c->gpu_is_nvidia
+                      ? "GATED (DLSS FG requires NVIDIA RTX 40+ GPU -> fallback FSR 3.1 FG)"
+                      : "GATED (DLSS FG requires RTX 40/50 Optical Flow -> fallback FSR 3.1 FG)";
+    } else if (!strcmp(mode, "xefg") && !vk_xefg_available()) {
+        eff_mode = "fsr3_fg";
+        hw_gate = "GATED (XeFG requires libxess_fg.dll in GAME directory -> fallback FSR 3.1 FG)";
     }
     int mult = !strcmp(mult_s, "6x") ? 6 : !strcmp(mult_s, "4x") ? 4 : !strcmp(mult_s, "3x") ? 3 : 2;
-    if (mult > 2 && (strcmp(eff_mode, "dlss_fg") != 0 || !c->gpu_is_rtx50)) {
+    if (!strcmp(eff_mode, "xefg")) {
+        if (mult > 4) {
+            mult = 4;
+            hw_gate = "GATED (Intel XeFG supports up to 4x -> clamped to 4x)";
+        }
+    } else if (mult > 2 && (strcmp(eff_mode, "dlss_fg") != 0 || !c->gpu_is_rtx50)) {
         mult = 2;
         if (!strcmp(eff_mode, "dlss_fg"))
-            hw_gate = "GATED (MFG 4x/6x requires NVIDIA GeForce RTX 50 Series -> clamped to 2x)";
+            hw_gate = "GATED (MFG 3x/4x/6x requires NVIDIA GeForce RTX 50 Series -> clamped to 2x)";
     }
     __atomic_store_n(&g_fg_mult, mult, __ATOMIC_RELAXED);
     char sig[160];
@@ -568,6 +579,7 @@ static void fg_apply_locked(void) {
         snprintf(g_fg_logged, sizeof g_fg_logged, "%s", sig);
         const char *mname = !strcmp(eff_mode, "dlss_fg") ? (c->gpu_is_rtx50 && mult > 2 ? "NVIDIA DLSS 4.5 Multi-Frame Gen"
                                                                                         : "NVIDIA DLSS Frame Generation")
+                          : !strcmp(eff_mode, "xefg")    ? "Intel Xe Frame Gen (XeFG)"
                           : !strcmp(eff_mode, "fsr4_fg") ? "AMD FSR 4 AI Frame Generation (RDNA 4 Neural)"
                                                          : "AMD FSR 3.1 Frame Generation (Optical Flow)";
         const char *pname = !strcmp(eff_mode, "dlss_fg")
@@ -579,6 +591,7 @@ static void fg_apply_locked(void) {
                         "HardwareCheck='%s' | LowLatency='%s' | GPU='%s'",
                         mname, pname, mult, mult - 1, hw_gate,
                         !strcmp(eff_mode, "dlss_fg") ? "NVIDIA Reflex (VK_NV_low_latency2)"
+                        : !strcmp(eff_mode, "xefg")  ? "Intel XeLL (libxell.dll)"
                                                      : "AMD Anti-Lag 2 (VK_AMD_anti_lag) + Reflex",
                         c->props.deviceName);
     }

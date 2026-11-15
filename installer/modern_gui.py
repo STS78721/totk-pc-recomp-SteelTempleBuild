@@ -59,12 +59,15 @@ CONTROLLER_GUIDE_TEXT = """=====================================================
 
 1. HOW TO OPEN / CLOSE THE IN-GAME SETTINGS MENU:
    -----------------------------------------------------------------------------
-   • CONTROLLER: Press SELECT + START at the same time
-     - PlayStation (PS5 / PS4): Press [Share / Create] + [Options] together
+   • CONTROLLER:
+     - PlayStation (PS5 / PS4): Click the [Touchpad] directly, or press [Share / Create] + [Options]
      - Xbox (Series X|S / One):  Press [View / Back] + [Menu / Start] together
      - Nintendo Switch Layout:  Press [Minus (-)] + [Plus (+)] together
 
    • KEYBOARD:   Press [F1] or [Esc] at any time.
+
+   • MENU THEMES: Switch between Tears of the Kingdom (Zonai), Dark, and Light
+     under Settings -> Menu -> Menu theme.
 
 2. HOW TO NAVIGATE THE MENU OVERLAY WITH A CONTROLLER:
    -----------------------------------------------------------------------------
@@ -215,7 +218,7 @@ class ModernTotkInstaller(ctk.CTk):
                                  font=ctk.CTkFont(size=20, weight="bold"), text_color=ACCENT_GREEN)
         title_lbl.pack(pady=(12, 2))
 
-        sub_lbl = ctk.CTkLabel(header, text="SteelTempSaint's ToTK Recomp (Beta 6.2) | Up to 240 FPS • DLSS 4.5 / DLSS-NR • Multi-FG • Reflex • Native DualSense",
+        sub_lbl = ctk.CTkLabel(header, text="SteelTempSaint's ToTK Recomp (Beta 6.3) | Up to 240 FPS • DLSS 4.5 / DLSS-NR • Multi-FG • Reflex • Native DualSense",
                                font=ctk.CTkFont(size=12, weight="bold"), text_color=TEXT_DIM)
         sub_lbl.pack(pady=(0, 12))
 

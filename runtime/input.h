@@ -57,6 +57,9 @@ void input_menu(int open);
 int input_menu_gate(int *held, int menu_open, uint64_t *buttons, int32_t sticks[4]);
 int input_overlay_gate(int *held, uint64_t *buttons);   // L3+R3: 1 in the poll both go down
 int input_pad_read(uint64_t *buttons, int32_t *lx, int32_t *ly);
+// PS4 DualShock 4 / PS5 DualSense touchpad click (SDL_GAMEPAD_BUTTON_TOUCHPAD) rising edge: 1 on press.
+// Menu calls this on each menu frame to close on a second press without leaking into the game.
+int input_pad_touchpad_edge(void);
 // The gamepad layout in effect (PAD_LAYOUT_*, input_map.h; TOTK_PAD_LAYOUT, live); -1 without a gamepad. Any thread.
 int input_pad_layout(void);
 // Current gamepad battery percentage and charging state. Returns 0 when the controller reports no battery status.

@@ -33,6 +33,7 @@ static int g_font_bad;
 #pragma clang diagnostic pop
 #include "ui/amiibo_page.h"
 #include "ui/binds_page.h"
+#include "ui/menu_theme.h"
 #include "ui/option_rows.h"
 
 extern "C" {
@@ -68,6 +69,12 @@ int vk_xell_available(void);
 int vk_xess_is_xmx(void);
 const char *vk_xess_model_name(void);
 uint64_t vk_xess_dispatches(void);
+int vk_dlaa_wanted(void);
+int vk_dlaa_available(void);
+int vk_dlaa_init_failed(void);
+const char *vk_dlaa_normalize_model(const char *cfg_str);
+int vk_dlaa_resolve_preset(const char *cfg_str, int quality_val, char *out_gen, size_t gen_cap, int *out_gated);
+int vk_dlaa_ui_status(char *gen_buf, size_t gen_cap, char *preset_char_out, int *out_gated);
 void res_sizes(unsigned out[2], unsigned scene[2]);
 void res_wanted(unsigned out[2]);
 void res_wanted_scene(unsigned scene[2]);
@@ -168,6 +175,7 @@ static const struct { int bit; ImGuiKey key; } pad_keys[] = {
 };
 static uint64_t pad_prev;   // buttons at the last frame; a button held when the menu opened counts once released
 static int stick_dir = -1;  // the D-pad button the left stick holds, -1 none
+static bool g_touch_close;  // PS4/PS5 touchpad click observed while the menu is open
 
 // The left stick moves the cursor as the D-pad does (ImGui's own stick handling only scrolls the page): past half way
 // it holds the D-pad direction of its larger axis, kept until that axis falls under 0.35; ImGui repeats a held one.
@@ -183,14 +191,17 @@ static void pad_events(ImGuiIO &io, int reset) {
     uint64_t b;
     int32_t lx, ly;
     int have = input_pad_read(&b, &lx, &ly);
+    int touch_edge = input_pad_touchpad_edge();
     if (have) io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
     else io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
     stick_dir = stick_to_dpad(lx, ly);
     if (stick_dir >= 0) b |= 1ull << stick_dir;
     if (reset) {
         pad_prev = b;
+        g_touch_close = false;
         return;
     }
+    if (touch_edge) g_touch_close = true;
     for (const auto &k : pad_keys) {
         uint64_t m = 1ull << k.bit;
         if ((b ^ pad_prev) & m) io.AddKeyEvent(k.key, (b & m) != 0);
@@ -218,28 +229,8 @@ static float menu_scale(uint32_t h) {
     return ((float)h >= least ? (float)h : least) / 1080.0f;
 }
 
-// SavageWindRecomp's colours: dark green panels, gold accents.
-static void style_init(ImGuiStyle &s) {
-    ImGui::StyleColorsDark(&s);
-    s.WindowRounding = 14; s.FrameRounding = 8; s.GrabRounding = 8; s.TabRounding = 8; s.ChildRounding = 10;
-    s.WindowPadding = ImVec2(28, 22); s.FramePadding = ImVec2(14, 8); s.ItemSpacing = ImVec2(14, 12);
-    s.WindowBorderSize = 0; s.ScrollbarSize = 18;
-    ImVec4 *c = s.Colors;
-    ImVec4 gold(0.93f, 0.76f, 0.33f, 1), green(0.15f, 0.36f, 0.25f, 1);
-    c[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.09f, 0.08f, 0.94f);
-    c[ImGuiCol_ChildBg] = ImVec4(0, 0, 0, 0);
-    c[ImGuiCol_Text] = ImVec4(0.96f, 0.94f, 0.88f, 1);
-    c[ImGuiCol_TextDisabled] = ImVec4(0.62f, 0.64f, 0.58f, 1);
-    c[ImGuiCol_Button] = ImVec4(0.14f, 0.22f, 0.18f, 1);
-    c[ImGuiCol_ButtonHovered] = green;
-    c[ImGuiCol_ButtonActive] = ImVec4(0.21f, 0.50f, 0.34f, 1);
-    c[ImGuiCol_Tab] = ImVec4(0.12f, 0.18f, 0.15f, 1);
-    c[ImGuiCol_TabHovered] = green;
-    c[ImGuiCol_TabSelected] = ImVec4(0.21f, 0.44f, 0.31f, 1);
-    c[ImGuiCol_TabSelectedOverline] = gold;
-    c[ImGuiCol_NavCursor] = gold;
-    c[ImGuiCol_Separator] = ImVec4(0.30f, 0.36f, 0.30f, 1);
-}
+// Switch 2-style Switcher / Light / Dark / Custom TOTK menu style (ui/menu_theme.h).
+static void style_init(ImGuiStyle &s) { totk_theme::fill_base_style(s); }
 
 static void make_context(void) {
     ImGui::CreateContext();
@@ -548,33 +539,48 @@ static void row_render_scale(void) {
         names[i] = shown[i];
     }
     if (opt_choice_list("TOTK_RENDER_SCALE", UI_MENU_RENDER_SCALE, vals, names, N, UI_MENU_RENDER_SCALE_DESC)) {
-        static const struct { const char *scale, *preset, *dlss, *model; } s[] = {
-            {"100", "native", "dlaa", "preset_k"}, {"67", "quality", "quality", "preset_k"},
-            {"58", "balanced", "balanced", "preset_k"}, {"50", "performance", "performance", "preset_m"},
-            {"33", "ultra_performance", "ultra_performance", "preset_l"}};
+        static const struct { const char *scale, *preset, *dlss; } s[] = {
+            {"100", "native", "dlaa"}, {"67", "quality", "quality"}, {"58", "balanced", "balanced"},
+            {"50", "performance", "performance"}, {"33", "ultra_performance", "ultra_performance"}};
         for (const auto &e : s)
             if (!strcmp(cfg_value("TOTK_RENDER_SCALE"), e.scale)) {
                 cfg_set("TOTK_UPSCALER_PRESET", e.preset), cfg_set("TOTK_DLSS", e.dlss);
-                cfg_set("TOTK_DLSS_PRESET", e.model);
                 cfg_save();
             }
     }
 }
 
-// Unified upscaler & anti-aliasing rows: DLSS 4 / 4.5, AMD FSR 4.1.2, Intel XeSS AI, FSR 1.0, and Bilinear.
+// Unified upscaler & anti-aliasing rows: DLSS, AMD FSR 4.1.2, Intel XeSS AI, FSR 1.0, and Bilinear.
 static bool rows_upscaler(void) {
     bool ask_restart = false;
     opt_group_text("AI Super Resolution & Anti-Aliasing");
     static const char *const up_vals[] = {"dlss", "fsr4", "xess", "fsr", "bilinear"};
-    const char *dp = cfg_value("TOTK_DLSS_PRESET");
-    const char *dlss_title = (!strcmp(dp, "preset_m") || !strcmp(dp, "preset_l")) ? "NVIDIA DLSS 4.5"
-                           : (!strcmp(dp, "preset_k") || !strcmp(dp, "preset_j")) ? "NVIDIA DLSS 4"
-                           : (!strcmp(dp, "preset_e") || !strcmp(dp, "preset_c")) ? "NVIDIA DLSS 3 (CNN)"
-                                                                                   : "NVIDIA DLSS 4 / 4.5";
+    const char *dp_norm = vk_dlaa_normalize_model(cfg_value("TOTK_DLSS_PRESET"));
+    const char *dlss_title = !strcmp(dp_norm, "cnn") ? "NVIDIA DLSS 3 (CNN)"
+                           : !strcmp(dp_norm, "transformer_gen2")
+                                 ? (vk_gpu_is_rtx40_plus() ? "NVIDIA DLSS 4.5 (Gen 2)" : "NVIDIA DLSS 4 (Gen 1)")
+                                 : "NVIDIA DLSS 4 (Gen 1)";
     const char *xess_title = vk_xess_model_name();
     const char *up_names[] = {dlss_title, "AMD FSR 4.1.2", xess_title, menu_text(UI_MENU_UPSCALER_FSR),
                               menu_text(UI_MENU_UPSCALER_BILINEAR)};
-    if (opt_choice_list("TOTK_UPSCALER", UI_MENU_UPSCALER, up_vals, up_names, 5, UI_MENU_UPSCALER_DESC)) {
+    const char *cur_up = cfg_value("TOTK_UPSCALER");
+    const char *up_note = nullptr;
+    bool need_restart_init = false;
+    if (!strcmp(cur_up, "dlss")) {
+        if (!vk_gpu_is_nvidia()) up_note = "Requires NVIDIA GeForce RTX GPU (inactive)";
+        else if (vk_dlaa_init_failed()) up_note = "nvngx_dlss.dll missing or NGX unavailable";
+        else if (!vk_dlaa_wanted()) {
+            up_note = "Restart required to initialize NVIDIA DLSS";
+            need_restart_init = true;
+        }
+    } else if (!strcmp(cur_up, "xess")) {
+        if (vk_xess_wanted() && !vk_xess_available()) up_note = "libxess.dll missing or XeSS unavailable";
+        else if (!vk_xess_wanted()) {
+            up_note = "Restart required to initialize Intel XeSS";
+            need_restart_init = true;
+        }
+    }
+    if (opt_choice_list("TOTK_UPSCALER", UI_MENU_UPSCALER, up_vals, up_names, 5, UI_MENU_UPSCALER_DESC, -1, up_note)) {
         const char *u = cfg_value("TOTK_UPSCALER");
         cfg_set("TOTK_DLAA", !strcmp(u, "dlss") ? "1" : "0");
         cfg_save();
@@ -583,12 +589,12 @@ static bool rows_upscaler(void) {
     bool is_dlss = !strcmp(up, "dlss");
     bool is_xess = !strcmp(up, "xess");
     bool is_fsr = !strcmp(up, "fsr4") || !strcmp(up, "fsr");
-    static const struct { const char *name, *label, *dlss, *scale, *model; } p[] = {
-        {"native", "Native / DLAA (100%)", "dlaa", "100", "preset_k"},
-        {"quality", "Quality (67%)", "quality", "67", "preset_k"},
-        {"balanced", "Balanced (58%)", "balanced", "58", "preset_k"},
-        {"performance", "Performance (50%)", "performance", "50", "preset_m"},
-        {"ultra_performance", "Ultra Performance (33%)", "ultra_performance", "33", "preset_l"}};
+    static const struct { const char *name, *label, *dlss, *scale; } p[] = {
+        {"native", "Native / DLAA (100%)", "dlaa", "100"},
+        {"quality", "Quality (67%)", "quality", "67"},
+        {"balanced", "Balanced (58%)", "balanced", "58"},
+        {"performance", "Performance (50%)", "performance", "50"},
+        {"ultra_performance", "Ultra Performance (33%)", "ultra_performance", "33"}};
     static const char *vals[5], *names[5];
     for (int i = 0; i < 5; i++) vals[i] = p[i].name, names[i] = p[i].label;
     if (is_dlss || is_fsr || is_xess) {
@@ -608,23 +614,49 @@ static bool rows_upscaler(void) {
                 if (!strcmp(cfg_value("TOTK_UPSCALER_PRESET"), e.name)) {
                     cfg_set("TOTK_DLSS", e.dlss), cfg_set("TOTK_RENDER_SCALE", e.scale);
                     if (!strcmp(cfg_value("TOTK_UPSCALER"), "dlss")) cfg_set("TOTK_DLAA", "1");
-                    cfg_set("TOTK_DLSS_PRESET", e.model);
                     cfg_save();
                 }
         }
-        if (snote && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC))
+        if ((snote || need_restart_init) && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC))
             ask_restart = true;
     }
     if (is_dlss) {
-        static const char *const model_vals[] = {"preset_k", "preset_j", "preset_m", "preset_l", "preset_e", "preset_c",
-                                                 "default"};
+        static const char *const model_vals[] = {"cnn", "transformer_gen1", "transformer_gen2"};
         static const char *const model_names[] = {
-            "DLSS 4 (Preset K)", "DLSS 4 (Preset J)",
-            "DLSS 4.5 Perf (Preset M)", "DLSS 4.5 UltraPerf (Preset L)",
-            "DLSS 3 CNN (Preset E)", "DLSS 3 CNN (Preset C)", "Default (Auto)"};
-        opt_choice_list("TOTK_DLSS_PRESET", UI_MENU_DLSS_MODEL, model_vals, model_names, 7, UI_MENU_DLSS_MODEL_DESC);
+            "CNN (DLSS 3)",
+            "Transformer Gen 1 (DLSS 4)",
+            "Transformer Gen 2 (DLSS 4.5)",
+        };
+        const char *norm_model = vk_dlaa_normalize_model(cfg_value("TOTK_DLSS_PRESET"));
+        int mcur = 1;
+        for (int i = 0; i < 3; i++)
+            if (!strcmp(norm_model, model_vals[i])) mcur = i;
+        const char *up_preset = cfg_value("TOTK_UPSCALER_PRESET");
+        int qval = !strcmp(up_preset, "native") ? 5
+                 : !strcmp(up_preset, "balanced") ? 1
+                 : !strcmp(up_preset, "performance") ? 0
+                 : !strcmp(up_preset, "ultra_performance") ? 3
+                 : 2;
+        int gated = 0;
+        int pr = vk_dlaa_resolve_preset(cfg_value("TOTK_DLSS_PRESET"), qval, nullptr, 0, &gated);
+        bool dlss_hw_ok = vk_gpu_is_nvidia() && !vk_dlaa_init_failed();
+        const char *dlss_dis = !vk_gpu_is_nvidia() ? "Requires NVIDIA GeForce RTX GPU"
+                                                   : "Requires nvngx_dlss.dll in GAME directory";
+        static char model_note[128];
+        if (!dlss_hw_ok) {
+            snprintf(model_note, sizeof model_note, "%s", dlss_dis);
+            opt_disable_next_text(dlss_dis);
+        } else if (gated) {
+            snprintf(model_note, sizeof model_note, "FP8 Tensor Cores (RTX 40/50) required -> using Gen 1 (Preset K)");
+        } else {
+            snprintf(model_note, sizeof model_note, "NVIDIA recommended Preset %c for %s scale", 'A' + pr - 1,
+                     up_preset && *up_preset ? up_preset : "current");
+        }
+        opt_choice_list("TOTK_DLSS_PRESET", UI_MENU_DLSS_MODEL, model_vals, model_names, 3, UI_MENU_DLSS_MODEL_DESC,
+                        mcur, model_note);
         static const UiTextId chars[] = {UI_MENU_DLSS_CHARS_OFF, UI_MENU_DLSS_CHARS_LIGHT, UI_MENU_DLSS_CHARS_MEDIUM,
                                          UI_MENU_DLSS_CHARS_FULL};
+        if (!dlss_hw_ok) opt_disable_next_text(dlss_dis);
         opt_choice("TOTK_DLSS_CHAR_MASK", UI_MENU_DLSS_CHARS, chars, 4, UI_MENU_DLSS_CHARS_DESC);
     }
     if (is_xess) {
@@ -640,8 +672,11 @@ static bool rows_upscaler(void) {
             "Ultra Performance (3.0x - Maximum FPS)",
             "Native AA (1.0x - Anti-Aliasing Only)"
         };
-        const char *xess_note = vk_xess_is_xmx() ? "Hardware XMX Matrix Acceleration (Intel Arc)"
-                                                 : "Universal DP4a Vector Acceleration";
+        if (vk_xess_wanted() && !vk_xess_available()) opt_disable_next_text("Requires libxess.dll in GAME directory");
+        const char *xess_note = (vk_xess_wanted() && !vk_xess_available())
+                                    ? "libxess.dll missing in GAME directory"
+                                    : (vk_xess_is_xmx() ? "Hardware XMX Matrix Acceleration (Intel Arc)"
+                                                         : "Universal DP4a Vector Acceleration");
         opt_choice_list("TOTK_XESS_QUALITY", UI_MENU_XESS_QUALITY, xess_q_vals, xess_q_names, 7,
                         UI_MENU_XESS_QUALITY_DESC, -1, xess_note);
     }
@@ -655,7 +690,7 @@ static bool rows_upscaler(void) {
     static const char *const fg_vals[] = {"off", "dlss_fg", "xefg", "fsr3_fg", "fsr4_fg"};
     static const char *const fg_names[] = {
         "Off",
-        "NVIDIA DLSS Frame Gen (GeForce RTX)",
+        "NVIDIA DLSS Frame Gen (RTX 40+)",
         "Intel Xe Frame Gen - XeFG (Arc)",
         "AMD FSR 3.1 Frame Gen (Universal)",
         "AMD FSR 4 AI Frame Gen (RDNA4+)"
@@ -666,12 +701,12 @@ static bool rows_upscaler(void) {
     if (!strcmp(fg_cur, "fsr4_fg") && !vk_gpu_is_rx9000()) {
         snprintf(fg_note, sizeof fg_note, "requires AMD RX 9000 Series GPU (using FSR 3.1 FG)");
         fgn = fg_note;
-    } else if (!strcmp(fg_cur, "dlss_fg") && !vk_gpu_is_nvidia()) {
-        snprintf(fg_note, sizeof fg_note, "requires NVIDIA RTX GPU (using FSR 3.1 FG)");
+    } else if (!strcmp(fg_cur, "dlss_fg") && !vk_gpu_is_rtx40_plus()) {
+        snprintf(fg_note, sizeof fg_note, "requires NVIDIA RTX 40/50 Optical Flow (using FSR 3.1 FG)");
         fgn = fg_note;
     } else if (!strcmp(fg_cur, "xefg")) {
         if (!vk_xefg_available()) {
-            snprintf(fg_note, sizeof fg_note, "libxess_fg.dll missing in game directory");
+            snprintf(fg_note, sizeof fg_note, "libxess_fg.dll missing (using FSR 3.1 FG)");
             fgn = fg_note;
         } else if (!vk_gpu_is_intel()) {
             snprintf(fg_note, sizeof fg_note, "Intel Arc GPU recommended (libxess_fg.dll ready)");
@@ -681,7 +716,7 @@ static bool rows_upscaler(void) {
     if (opt_choice_list("TOTK_FG_MODE", UI_MENU_FG_MODE, fg_vals, fg_names, 5, UI_MENU_FG_MODE_DESC, -1, fgn)) {
         const char *fg_new = cfg_value("TOTK_FG_MODE");
         if (!strcmp(fg_new, "dlss_fg")) {
-            cfg_set("TOTK_REFLEX", "boost");
+            if (vk_gpu_is_nvidia()) cfg_set("TOTK_REFLEX", "boost");
             if (!vk_gpu_is_rtx50()) cfg_set("TOTK_FG_MULT", "2x");
         } else if (!strcmp(fg_new, "xefg")) {
             cfg_set("TOTK_XELL", "boost");
@@ -695,8 +730,8 @@ static bool rows_upscaler(void) {
     }
     fg_cur = cfg_value("TOTK_FG_MODE");
     bool fg_on = strcmp(fg_cur, "off") != 0;
-    bool fg_dlss = !strcmp(fg_cur, "dlss_fg") && vk_gpu_is_nvidia();
-    bool fg_xefg = !strcmp(fg_cur, "xefg");
+    bool fg_dlss = !strcmp(fg_cur, "dlss_fg") && vk_gpu_is_rtx40_plus();
+    bool fg_xefg = !strcmp(fg_cur, "xefg") && vk_xefg_available();
     if (fg_dlss) {
         static const char *const fgp_vals[] = {"preset_a", "preset_b", "preset_c"};
         static const char *const fgp_names[] = {"DLSS FG Transformer (Preset A)", "DLSS FG Optical Flow (Preset B)",
@@ -741,7 +776,8 @@ static bool rows_upscaler(void) {
     opt_group_text("Input Latency & Responsiveness");
     static const char *const reflex_vals[] = {"off", "on", "boost"};
     static const char *const reflex_names[] = {"Off", "On", "On + Boost"};
-    const char *ref_note = vk_gpu_is_nvidia() ? "VK_NV_low_latency2 Active" : "Requires NVIDIA GPU";
+    const char *ref_note = vk_gpu_is_nvidia() ? "VK_NV_low_latency2 Active" : "Requires NVIDIA GeForce GPU";
+    if (!vk_gpu_is_nvidia()) opt_disable_next_text("Requires NVIDIA GeForce GPU");
     opt_choice_list("TOTK_REFLEX", UI_MENU_REFLEX, reflex_vals, reflex_names, 3, UI_MENU_REFLEX_DESC, -1, ref_note);
 
     static const char *const al_vals[] = {"off", "on"};
@@ -1235,6 +1271,7 @@ static void tab_controls(float scale) {
     const char *note = prompts_note(&restart);
     opt_choice("TOTK_PROMPTS", UI_MENU_PROMPTS, prompts, 5, UI_MENU_PROMPTS_DESC, note);
     bool ask = restart && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC);
+    opt_toggle("TOTK_TOUCHPAD_MENU", UI_MENU_TOUCHPAD_MENU, UI_MENU_TOUCHPAD_MENU_DESC);
     opt_toggle("TOTK_MOTION", UI_MENU_MOTION, UI_MENU_MOTION_DESC);
     opt_slider("TOTK_RUMBLE_STRENGTH", UI_MENU_RUMBLE_STRENGTH, 0, 300, UI_MENU_RUMBLE_STRENGTH_DESC, 10, "%.0f %%");
     opt_slider("TOTK_RUMBLE_CURVE", UI_MENU_RUMBLE_CURVE, 0.2f, 1.5f, UI_MENU_RUMBLE_CURVE_DESC, 0.05f, "%.2f");
@@ -1277,6 +1314,8 @@ static void tab_controls(float scale) {
 
 static void tab_menu(float scale) {
     opt_begin("##menu", scale);
+    static const UiTextId themes[] = {UI_MENU_THEME_TOTK, UI_MENU_THEME_DARK, UI_MENU_THEME_LIGHT};
+    opt_choice("TOTK_MENU_THEME", UI_MENU_MENU_THEME, themes, sizeof themes / sizeof *themes, UI_MENU_MENU_THEME_DESC);
     static const UiTextId langs[] = {UI_MENU_MENU_LANG_AUTO, UI_MENU_LANGNAME_EN, UI_MENU_LANGNAME_RU,
                                      UI_MENU_LANGNAME_PT_BR, UI_MENU_LANGNAME_ZH_HANS};
     opt_choice("TOTK_MENU_LANG", UI_MENU_MENU_LANG, langs, sizeof langs / sizeof *langs, UI_MENU_MENU_LANG_DESC);
@@ -1568,81 +1607,201 @@ static void tab_mods(float scale) {
     restart_confirm();
 }
 
-// ---- the window: title, tabs (L / R or Q / E switch), the page, and the bottom row with "Continue" and "Quit game".
-// B on the gamepad and Esc close it.
+// ---- the window: Switch 2-inspired MKW-style sidebar + branded header + card pages + footer hints & pills.
+// B on the gamepad, Esc, F1, Minus+Plus, or PS4/PS5 Touchpad click close it.
 static void layout_menu(uint32_t w, uint32_t h, float scale) {
+    using namespace totk_theme;
     bool was_modal = g_modal || binds_modal();
     g_modal = false;
-    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2((float)w, (float)h), IM_COL32(0, 0, 0, 120));
-    float ww = fminf(w * 0.88f, 1400 * scale), wh = fminf(h * 0.86f, 820 * scale);
+    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2((float)w, (float)h), kBackdrop);
+    float ww = fminf(w * 0.88f, 1540 * scale), wh = fminf(h * 0.88f, 900 * scale);
     ImGui::SetNextWindowPos(ImVec2(w * 0.5f, h * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(ww, wh), ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("##menu", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                                        ImGuiWindowFlags_NoSavedSettings);
-    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1), "%s", menu_text(UI_MENU_TITLE));
-    // the port version and the game update, right-aligned on the title line: what a bug report needs first
+                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    ImDrawList *dl = ImGui::GetWindowDrawList();
+    ImFont *font = ImGui::GetFont();
+    float fs = ImGui::GetFontSize();
+    ImVec2 p = ImGui::GetWindowPos();
+    bool is_totk = (g_active == THEME_TOTK);
+    float bar_h = fs * 3.05f, foot_h = fs * 2.95f;
+    float band_h = is_totk ? 10.0f * scale + 2.0f * scale : 0.0f;
+
+    dl->AddRectFilled(p, ImVec2(p.x + ww, p.y + bar_h + band_h), kHeader, ImGui::GetStyle().WindowRounding,
+                      ImDrawFlags_RoundCornersTop);
+    if (is_totk) {
+        draw_zonai_band(dl, p.x, p.x + ww, p.y + bar_h, 10.0f * scale, 2.0f * scale, true);
+    } else {
+        dl->AddLine(ImVec2(p.x, p.y + bar_h), ImVec2(p.x + ww, p.y + bar_h), kDivider, 1.0f);
+    }
+
+    float pad_x = 28.0f * scale;
+    float title_fs = fs * 1.16f;
+    if (is_totk) {
+        float cr = fs * 0.68f;
+        ImVec2 cc(p.x + pad_x + cr, p.y + bar_h * 0.5f);
+        draw_totk_crest(dl, cc, cr, ImGui::GetTime());
+        float tx = cc.x + cr + 14.0f * scale;
+        dl->AddText(font, title_fs, ImVec2(tx, p.y + (bar_h - title_fs) * 0.5f), kText, menu_text(UI_MENU_TITLE));
+        float pill_w = 5.0f * scale;
+        float title_w = font->CalcTextSizeA(title_fs, FLT_MAX, 0, menu_text(UI_MENU_TITLE)).x;
+        float sep_x = tx + title_w + 14.0f * scale;
+        dl->AddRectFilled(ImVec2(sep_x, p.y + bar_h * 0.34f), ImVec2(sep_x + pill_w, p.y + bar_h * 0.66f), kAccent,
+                          pill_w * 0.5f);
+        dl->AddText(font, fs * 0.78f, ImVec2(sep_x + pill_w + 10.0f * scale, p.y + (bar_h - fs * 0.78f) * 0.5f),
+                    kAccentText, "TEARS OF THE KINGDOM");
+    } else {
+        float pill_w = 5.0f * scale;
+        dl->AddRectFilled(ImVec2(p.x + pad_x, p.y + bar_h * 0.28f), ImVec2(p.x + pad_x + pill_w, p.y + bar_h * 0.72f),
+                          kAccent, pill_w * 0.5f);
+        dl->AddText(font, title_fs, ImVec2(p.x + pad_x + pill_w + 12.0f * scale, p.y + (bar_h - title_fs) * 0.5f),
+                    kText, menu_text(UI_MENU_TITLE));
+    }
+
     char game[16], version[128], pver[64];
     snprintf(game, sizeof game, "%d.%d.%d", rt_game_version / 100, rt_game_version / 10 % 10, rt_game_version % 10);
     snprintf(pver, sizeof pver, "%s (Next Gen STS Build)", rt_port_version);
     snprintf(version, sizeof version, menu_text(UI_MENU_VERSION), pver, game);
-    ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(version).x);
-    ImGui::TextDisabled("%s", version);
+    float ver_fs = fs * 0.78f;
+    float vw = font->CalcTextSizeA(ver_fs, FLT_MAX, 0, version).x;
+    dl->AddText(font, ver_fs, ImVec2(p.x + ww - pad_x - vw, p.y + (bar_h - ver_fs) * 0.5f),
+                is_totk ? kTextSoft : kTextDim, version);
 
-    int step = g_modal || binds_modal()                                                                  ? 0
+    int step = was_modal                                                                                  ? 0
              : ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) || ImGui::IsKeyPressed(ImGuiKey_E, false) ? 1
              : ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false) || ImGui::IsKeyPressed(ImGuiKey_Q, false) ? -1
-                                                                                                         : 0;
+                                                                                                          : 0;
     if (step) g_tab_request = (g_tab + step + TAB_COUNT) % TAB_COUNT;
-    if (g_tab_request >= 0) g_focus_page = g_tab_request;   // the new page's first row takes the cursor
-
-    const ImGuiStyle &st = ImGui::GetStyle();
-    float bottom = ImGui::GetFrameHeight() + st.ItemSpacing.y * 2;
-    if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_NoTabListScrollingButtons)) {
-        for (int k = 0; k < TAB_COUNT; k++) {
-            char label[128];
-            snprintf(label, sizeof label, "  %s  ###tab%d", menu_text(kTabNames[k]), k);   // the id stays per language
-            if (!ImGui::BeginTabItem(label, nullptr, g_tab_request == k ? ImGuiTabItemFlags_SetSelected : 0)) continue;
-            g_tab = k;
-            if (g_focus_page == k) {
-                opt_focus_first();
-                g_focus_page = -1;
-            }
-            ImGui::Spacing();
-            // the page's rows are a NavFlattened child of this window itself: ImGui clips the items of a direct child
-            // only, so behind a second child level the rows scrolled out above the tabs won D-pad moves from the
-            // buttons and the tabs (up from "Continue" went to the tabs, down from the tabs to "Continue")
-            opt_reserve_bottom(bottom);
-            switch (k) {
-            case TAB_SCREEN: tab_screen(scale); break;
-            case TAB_DLSS_NR: tab_dlss_nr(scale); break;
-            case TAB_GAME: tab_game(scale); break;
-            case TAB_MODS: tab_mods(scale); break;
-            case TAB_SOUND: tab_sound(scale); break;
-            case TAB_CONTROLS: tab_controls(scale); break;
-            case TAB_AMIIBO: tab_amiibo(scale); break;
-            case TAB_MENU: tab_menu(scale); break;
-            case TAB_CHEATS:
-                if (tab_cheats(scale)) {
-                    restart_rebuild = true;
-                    ImGui::OpenPopup("##restart_confirm");
-                }
-                restart_confirm();
-                break;
-            case TAB_ADVANCED: tab_advanced(scale); break;
-            }
-            ImGui::EndTabItem();
-        }
+    if (g_tab_request >= 0) {
+        g_tab = g_tab_request;
+        g_focus_page = g_tab;
         g_tab_request = -1;
-        ImGui::EndTabBar();
     }
 
-    // bottom row: the save status on the left, the buttons on the right
-    ImGui::Spacing();
-    float y = ImGui::GetCursorPosY();
-    if (!cfg_last_save_ok()) {   // stays until a save succeeds; the settings hold for the session
-        ImGui::SetCursorPosY(y + st.FramePadding.y);
-        ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.35f, 1), "%s", menu_text(UI_MENU_SAVE_FAILED));
+    float body_y0 = p.y + bar_h + band_h;
+    float body_y1 = p.y + wh - foot_h - band_h;
+    float body_h = fmaxf(body_y1 - body_y0, 80.0f);
+
+    float max_tab_w = 0;
+    for (int k = 0; k < TAB_COUNT; k++) {
+        float tw = font->CalcTextSizeA(fs, FLT_MAX, 0, menu_text(kTabNames[k])).x;
+        if (tw > max_tab_w) max_tab_w = tw;
     }
+    float side_w = fmaxf(250.0f * scale, fminf(ww * 0.27f, max_tab_w + 64.0f * scale));
+    dl->AddRectFilled(ImVec2(p.x, body_y0), ImVec2(p.x + side_w, body_y1), kSidebar);
+    dl->AddLine(ImVec2(p.x + side_w, body_y0), ImVec2(p.x + side_w, body_y1), kDivider, 1.0f);
+    if (is_totk) {
+        float cy = (body_y0 + body_y1) * 0.5f, dr = 4.5f * scale;
+        dl->AddQuadFilled(ImVec2(p.x + side_w, cy - dr), ImVec2(p.x + side_w + dr, cy),
+                          ImVec2(p.x + side_w, cy + dr), ImVec2(p.x + side_w - dr, cy), kAccentAlt);
+    }
+
+    float side_pad = 14.0f * scale;
+    float hint_row_h = fs * 1.45f;
+    float cat_area_h = fmaxf(body_h - side_pad * 2.0f - hint_row_h - 8.0f * scale, 60.0f);
+    float gap = 5.0f * scale;
+    float btn_h = floorf(fminf(fs * 2.15f, (cat_area_h - (TAB_COUNT - 1) * gap) / TAB_COUNT));
+    for (int k = 0; k < TAB_COUNT; k++) {
+        ImVec2 bp(p.x + side_pad, body_y0 + side_pad + k * (btn_h + gap));
+        float bw_cat = side_w - side_pad * 2.0f;
+        ImGui::SetCursorScreenPos(bp);
+        ImGui::PushID(k);
+        ImGui::PushStyleColor(ImGuiCol_NavCursor, ImVec4(0, 0, 0, 0));
+        bool clicked = ImGui::InvisibleButton("##cat", ImVec2(bw_cat, btn_h), ImGuiButtonFlags_EnableNav);
+        ImGui::PopStyleColor();
+        bool hov = ImGui::IsItemHovered(), foc = ImGui::IsItemFocused() && ImGui::GetCurrentContext()->NavCursorVisible;
+        if (clicked && k != g_tab) {
+            g_tab = k;
+            g_focus_page = k;
+        }
+        bool sel = (k == g_tab);
+        float cr = 9.0f * scale;
+        if (sel || hov || foc) {
+            dl->AddRectFilled(bp, ImVec2(bp.x + bw_cat, bp.y + btn_h), sel ? kRowSel : kRowHover, cr);
+            if (is_totk || sel || foc) {
+                dl->AddRect(bp, ImVec2(bp.x + bw_cat, bp.y + btn_h), sel ? kAccent : (foc ? kAccent : kRowBorder), cr,
+                            0, sel ? 1.8f : 1.0f);
+            }
+        }
+        if (sel) {
+            float bar_w = 5.0f * scale, bar_inset = fmaxf(5.0f * scale, btn_h * 0.18f);
+            dl->AddRectFilled(ImVec2(bp.x + 3.0f * scale, bp.y + bar_inset),
+                              ImVec2(bp.x + 3.0f * scale + bar_w, bp.y + btn_h - bar_inset),
+                              is_totk ? kAccentAlt : kAccent, bar_w * 0.5f);
+        }
+        const char *label = menu_text(kTabNames[k]);
+        ImVec4 clip(bp.x + 14.0f * scale, bp.y, bp.x + bw_cat - 10.0f * scale, bp.y + btn_h);
+        dl->AddText(font, fs, ImVec2(bp.x + 16.0f * scale, bp.y + (btn_h - fs) * 0.5f),
+                    sel ? kAccentText : (hov || foc ? kText : kTextSoft), label, nullptr, 0, &clip);
+        ImGui::PopID();
+    }
+
+    float pill_h = fs * 1.05f;
+    float pill_y = body_y1 - side_pad - pill_h;
+    float pill_x = p.x + side_pad + 6.0f * scale;
+    float lw = hint_pill(dl, ImVec2(pill_x, pill_y), pill_h, "L / Q");
+    hint_pill(dl, ImVec2(pill_x + lw + 8.0f * scale, pill_y), pill_h, "R / E");
+
+    float content_pad = 22.0f * scale;
+    ImGui::SetCursorScreenPos(ImVec2(p.x + side_w + content_pad, body_y0 + content_pad * 0.8f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::BeginChild("##page", ImVec2(ww - side_w - content_pad * 2.0f, body_h - content_pad * 1.6f),
+                      ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    if (g_focus_page == g_tab) {
+        opt_focus_first();
+        g_focus_page = -1;
+    }
+    opt_reserve_bottom(0);
+    switch (g_tab) {
+    case TAB_SCREEN: tab_screen(scale); break;
+    case TAB_DLSS_NR: tab_dlss_nr(scale); break;
+    case TAB_GAME: tab_game(scale); break;
+    case TAB_MODS: tab_mods(scale); break;
+    case TAB_SOUND: tab_sound(scale); break;
+    case TAB_CONTROLS: tab_controls(scale); break;
+    case TAB_AMIIBO: tab_amiibo(scale); break;
+    case TAB_MENU: tab_menu(scale); break;
+    case TAB_CHEATS:
+        if (tab_cheats(scale)) {
+            restart_rebuild = true;
+            ImGui::OpenPopup("##restart_confirm");
+        }
+        restart_confirm();
+        break;
+    case TAB_ADVANCED: tab_advanced(scale); break;
+    }
+    ImGui::EndChild();
+
+    float fy = p.y + wh - foot_h;
+    dl->AddRectFilled(ImVec2(p.x, fy - band_h), ImVec2(p.x + ww, p.y + wh), kHeader,
+                      ImGui::GetStyle().WindowRounding, ImDrawFlags_RoundCornersBottom);
+    if (is_totk) {
+        draw_zonai_band(dl, p.x, p.x + ww, fy - band_h + 2.0f * scale, 10.0f * scale, 2.0f * scale, false);
+    } else {
+        dl->AddLine(ImVec2(p.x, fy), ImVec2(p.x + ww, fy), kDivider, 1.0f);
+    }
+
+    float hint_fs = fs * 0.85f;
+    float glyph_r = hint_fs * 0.56f;
+    float cy = fy + foot_h * 0.5f;
+    float hx = p.x + pad_x + glyph_r;
+    hint_glyph(dl, ImVec2(hx, cy), glyph_r, "A");
+    hx += glyph_r + 8.0f * scale;
+    const char *sel_txt = menu_text(UI_MENU_HINT_SELECT);
+    dl->AddText(font, hint_fs, ImVec2(hx, cy - hint_fs * 0.5f), kTextSoft, sel_txt);
+    hx += font->CalcTextSizeA(hint_fs, FLT_MAX, 0, sel_txt).x + 22.0f * scale + glyph_r;
+    hint_glyph(dl, ImVec2(hx, cy), glyph_r, "B");
+    hx += glyph_r + 8.0f * scale;
+    const char *back_txt = menu_text(UI_MENU_HINT_BACK);
+    dl->AddText(font, hint_fs, ImVec2(hx, cy - hint_fs * 0.5f), kTextSoft, back_txt);
+    if (!cfg_last_save_ok()) {   // stays until a save succeeds; the settings hold for the session
+        hx += font->CalcTextSizeA(hint_fs, FLT_MAX, 0, back_txt).x + 22.0f * scale;
+        dl->AddText(font, hint_fs, ImVec2(hx, cy - hint_fs * 0.5f), kWarn, menu_text(UI_MENU_SAVE_FAILED));
+    }
+
     static int boot_snap_done;
     static char boot_vals[128][64];
     bool restart_needed = false;
@@ -1663,26 +1822,42 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     if (cur_sc[0] != want_sc[0] || cur_sc[1] != want_sc[1] || mods_changed() || cheats_rebuild_pending())
         restart_needed = true;
 
+    const ImGuiStyle &st = ImGui::GetStyle();
     const char *cont = menu_text(UI_MENU_CONTINUE), *quit = menu_text(UI_MENU_QUIT), *rest = menu_text(UI_MENU_RESTART);
-    float bw = fmaxf(ImGui::CalcTextSize(cont).x, ImGui::CalcTextSize(quit).x) + st.FramePadding.x * 4;
-    float rw = ImGui::CalcTextSize(rest).x + st.FramePadding.x * 4;
+    float bw = fmaxf(ImGui::CalcTextSize(cont).x, ImGui::CalcTextSize(quit).x) + st.FramePadding.x * 3.5f;
+    float rw = ImGui::CalcTextSize(rest).x + st.FramePadding.x * 3.5f;
+    float bh = ImGui::GetFrameHeight();
     float total_w = bw * 2 + st.ItemSpacing.x + (restart_needed ? rw + st.ItemSpacing.x : 0);
-    ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - st.WindowPadding.x - total_w, y));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + ww - pad_x - total_w, fy + (foot_h - bh) * 0.5f));
     if (restart_needed) {
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.72f, 0.45f, 0.12f, 0.90f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.85f, 0.55f, 0.16f, 1.00f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.62f, 0.38f, 0.10f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Button, v4(IM_COL32(184, 114, 30, 230)));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, v4(IM_COL32(216, 138, 40, 255)));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, v4(IM_COL32(158, 96, 24, 255)));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
         if (ImGui::Button(rest, ImVec2(rw, 0))) ImGui::OpenPopup("##restart_confirm");
-        ImGui::PopStyleColor(3);
+        ImGui::PopStyleColor(4);
         ImGui::SameLine();
     }
+    ImGui::PushStyleColor(ImGuiCol_Button, v4(kAccent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, v4(kAccent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, v4(kAccentAlt));
+    ImGui::PushStyleColor(ImGuiCol_Text,
+                          is_totk || g_active == THEME_LIGHT ? ImVec4(0.06f, 0.10f, 0.09f, 1.0f) : ImVec4(1, 1, 1, 1));
     if (ImGui::Button(cont, ImVec2(bw, 0))) set_open(0);
+    ImGui::PopStyleColor(4);
     ImGui::SameLine();
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     if (ImGui::Button(quit, ImVec2(bw, 0))) gfx_window_request_close();
+    ImGui::PopStyleVar();
+
+    if (is_totk) draw_totk_corners(dl, p, ImVec2(p.x + ww, p.y + wh), 18.0f * scale, 2.5f * scale);
+
     restart_confirm();
     was_modal = was_modal || g_modal || binds_modal();
-    if (!was_modal && (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)))
+    if (!was_modal && (ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+                       ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) || g_touch_close))
         set_open(0);
+    g_touch_close = false;
     ImGui::End();
 }
 
@@ -1883,14 +2058,19 @@ static void perf_tick(uint64_t now, const MenuTarget *t) {
             // Compact upscaler text (saves screen width)
             if (is_dlss || is_dlaa) {
                 g_perf_theme = 0;
-                const char *preset = cfg_value("TOTK_DLSS_PRESET");
-                char pbuf[16];
-                if (preset && (!strncasecmp(preset, "preset_", 7))) {
-                    char c = preset[7];
-                    if (c >= 'a' && c <= 'z') c -= 32;
-                    snprintf(pbuf, sizeof pbuf, "(%c)", c);
-                } else snprintf(pbuf, sizeof pbuf, "(%s)", preset && preset[0] ? preset : "M");
-                snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s %s", is_upscale ? "DLSS 4.5" : "DLAA 4.5", pbuf);
+                char gen_buf[48], pchar = 'K';
+                int gated = 0;
+                int pr = vk_dlaa_ui_status(gen_buf, sizeof gen_buf, &pchar, &gated);
+                const char *norm = vk_dlaa_normalize_model(cfg_value("TOTK_DLSS_PRESET"));
+                if (!pr) {
+                    snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s (N/A)", is_upscale ? "DLSS" : "DLAA");
+                } else {
+                    const char *ver = !strcmp(norm, "cnn") ? "3"
+                                    : (!strcmp(norm, "transformer_gen2") && !gated) ? "4.5"
+                                    : "4";
+                    snprintf(g_perf_upscaler, sizeof g_perf_upscaler, "%s %s (%c%s)",
+                             is_upscale ? "DLSS" : "DLAA", ver, pchar, gated ? "*" : "");
+                }
             } else if (is_xess) {
                 g_perf_theme = 3;
                 const char *xq = cfg_value("TOTK_XESS_QUALITY");
@@ -2033,8 +2213,15 @@ static void perf_picture(const MenuTarget *t, const ImVec4 &c) {
     rows[n].label_str = nullptr;
     rows[n].label_id = UI_MENU_OV_SCALING;
     if (!strcmp(up, "dlss") || cfg_bool("TOTK_DLAA")) {
-        snprintf(rows[n].val, sizeof rows[n].val, "%s (%s)", scene[0] < out[0] ? "NVIDIA DLSS 4.5" : "NVIDIA DLAA",
-                 cfg_value("TOTK_DLSS_PRESET"));
+        char gen_buf[48], pchar = 'K';
+        int gated = 0;
+        int pr = vk_dlaa_ui_status(gen_buf, sizeof gen_buf, &pchar, &gated);
+        if (!pr) {
+            snprintf(rows[n].val, sizeof rows[n].val, "NVIDIA DLSS (Unavailable)");
+        } else {
+            snprintf(rows[n].val, sizeof rows[n].val, "%s - %s (Preset %c%s)",
+                     scene[0] < out[0] ? "NVIDIA DLSS" : "NVIDIA DLAA", gen_buf, pchar, gated ? " - Gated" : "");
+        }
     } else if (!strcmp(up, "xess")) {
         snprintf(rows[n].val, sizeof rows[n].val, "Intel XeSS (%s | %s)", cfg_value("TOTK_XESS_QUALITY"),
                  vk_xess_is_xmx() ? "XMX" : "DP4a");
@@ -2415,7 +2602,9 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
         set_open(0);
         return 0;
     }
-    if (g_style_scale != scale) {
+    totk_theme::MenuTheme want_theme = totk_theme::current_from_cfg();
+    if (g_style_scale != scale || totk_theme::g_active != want_theme) {
+        style_init(g_base_style);
         ImGui::GetStyle() = g_base_style;
         ImGui::GetStyle().ScaleAllSizes(scale);
         g_style_scale = scale;
